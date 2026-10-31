@@ -1,0 +1,16 @@
+name: sega-player-v3-panel-staging
+services:
+  panel:
+    build: .
+    ports:
+      - "127.0.0.1:18000:8000"  # Deploy behind an HTTPS reverse proxy
+    environment:
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DATABASE_PATH: /app/data/segaiptv.db
+    volumes:
+      - segaiptv-data:/app/data
+    restart: unless-stopped
+volumes:
+  segaiptv-data:
+

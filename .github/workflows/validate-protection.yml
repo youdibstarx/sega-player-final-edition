@@ -1,0 +1,57 @@
+name: Validate APK protection changes
+on:
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'panel/**'
+      - '.github/workflows/validate-protection.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - run: yes | sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - run: gradle :app:testDebugUnitTest :app:assembleHardened
+        working-directory: android
+      - name: Prepare verified unsigned package and signing utility
+        run: |
+          mkdir -p dist
+          APK=android/app/build/outputs/apk/hardened/app-hardened-unsigned.apk
+          test "$(apkanalyzer manifest debuggable "$APK")" = "false"
+          test "$(apkanalyzer manifest application-id "$APK")" = "com.segaiptv.player.v3.secure"
+          test "$(apkanalyzer manifest version-code "$APK")" = "25"
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "$APK"
+          cp "$APK" dist/SEGA_PLAYER_V3_0.5.7_UNSIGNED.apk
+          cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" dist/apksigner.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SEGA-0.5.7-unsigned
+          path: dist/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: protection-test-reports
+          path: android/app/build/reports/tests/
+  panel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.txt
+        working-directory: panel
+      - run: python -m unittest discover -s tests -v
+        working-directory: panel
+
