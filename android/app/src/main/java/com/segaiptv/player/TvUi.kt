@@ -45,7 +45,8 @@ import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 
 /** TV-only composables: 10-foot typography and explicit focus affordances for remote D-pad. */
-private val tvSurface = Color(0xFF191C20)
+private val tvSurface: Color
+    @Composable get() = appTheme.surface
 private val tvMuted = Color(0xFFBAB1BA)
 
 private val tvPages = listOf(
@@ -77,7 +78,7 @@ fun TvShell(
     val searchable = page in listOf("channels", "movies", "series", "favorites")
     val initialFocus = remember { FocusRequester() }
     LaunchedEffect(page) { initialFocus.requestFocus() }
-    Column(Modifier.fillMaxSize().background(Color(0xFF08090B)).padding(8.dp)) {
+    Column(Modifier.fillMaxSize().background(appTheme.background).padding(8.dp)) {
         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             listOf("home" to tr(R.string.home), "channels" to tr(R.string.live_tv), "movies" to tr(R.string.movies), "series" to tr(R.string.series)).forEachIndexed { index, (id, label) ->
@@ -155,7 +156,7 @@ private fun TvLanding(config: AppConfig, identity: DeviceIdentity, channelCount:
                         .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)
                 ) {
                     Column(Modifier.fillMaxSize().background(
-                        if (index == 0) Brush.verticalGradient(listOf(Color(0xFF51432C), Color(0xFF24211C))) else Brush.verticalGradient(listOf(Color(0xFF30343A), Color(0xFF16181C))))
+                        if (index == 0) Brush.verticalGradient(listOf(appTheme.tileTop, appTheme.tileBottom)) else Brush.verticalGradient(listOf(appTheme.row, appTheme.panel)))
                         .padding(5.dp), horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center) {
                         Text(tile.first, fontSize = 35.sp, color = Color.White)
@@ -381,6 +382,7 @@ private fun TvSettings(config: AppConfig, identity: DeviceIdentity, count: Int,
             LanguagePicker()
             ViewerSettings(channels, warnings, error, loading)
         }
+        ThemePicker()
         if (error.isNotBlank()) Text(statusText(error), color = Color(0xFFFFC5AD), fontSize = 11.sp, maxLines = 1)
         Text(tr(R.string.copy_hint), color = tvMuted, fontSize = 10.sp)
     }

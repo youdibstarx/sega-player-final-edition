@@ -20,8 +20,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 
-internal val v3Gold = Color(0xFFE5BE77)
-internal val v3Panel = Color(0xFF15181C)
+internal val v3Gold: Color
+    @Composable get() = appTheme.accent
+internal val v3Panel: Color
+    @Composable get() = appTheme.panel
 
 /** Clickable provides D-pad/Enter handling. Focus is separate from the selected stream. */
 @Composable
@@ -30,7 +32,7 @@ fun TvAction(label: String, modifier: Modifier = Modifier, selected: Boolean = f
     Text(label, color = if (selected || focused) v3Gold else Color.White, maxLines = 1,
         overflow = TextOverflow.Ellipsis, fontSize = 12.sp,
         modifier = modifier.onFocusChanged { focused = it.isFocused }
-            .background(if (selected || focused) Color(0xFF353025) else v3Panel)
+            .background(if (selected || focused) appTheme.selected else v3Panel)
             .border(if (focused) 2.dp else 0.dp, if (focused) v3Gold else Color.Transparent)
             .clickable(onClick = onClick).padding(horizontal = 9.dp, vertical = 7.dp))
 }
@@ -54,7 +56,7 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
     var epgOpen by remember(selectedUrl) { mutableStateOf(false) }
     val selected = remember(live, selectedUrl) { live.firstOrNull { it.url == selectedUrl } }
     if (epgOpen && selected != null) EpgDialog(selected) { epgOpen = false }
-    Column(modifier.fillMaxSize().background(Color(0xFF08090B))) {
+    Column(modifier.fillMaxSize().background(appTheme.background)) {
         Text(tr(R.string.live_counts, groups.size, live.size), color = Color.LightGray,
             fontSize = 10.sp, modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp))
         if (warnings.isNotBlank()) Text(statusText(warnings), color = v3Gold, maxLines = 1, fontSize = 11.sp)
@@ -83,7 +85,7 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
                     var focused by remember { mutableStateOf(false) }
                     val active = ch.url == selectedUrl
                     Row(Modifier.fillMaxWidth().height(34.dp).onFocusChanged { focused = it.isFocused }
-                        .background(if (active || focused) Color(0xFF353025) else Color(0xFF202327))
+                        .background(if (active || focused) appTheme.selected else appTheme.row)
                         .border(if (focused) 2.dp else 0.dp, if (focused) v3Gold else Color.Transparent)
                         .clickable { if (selectedUrl == ch.url) onPlay(ch) else selectedUrl = ch.url }.padding(horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically) {

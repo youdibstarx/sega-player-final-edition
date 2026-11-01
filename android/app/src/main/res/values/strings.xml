@@ -99,5 +99,10 @@
     <string name="decoder_unavailable">This media could not be decoded on this device. Try another version or an external player.</string>
     <string name="external_player">Open with another player</string>
     <string name="no_external_player">No compatible player is installed.</string>
+    <string name="appearance_theme">Theme</string>
+    <string name="theme_classic">Classic Gold</string>
+    <string name="theme_ocean">Ocean Blue</string>
+    <string name="theme_emerald">Emerald Green</string>
+    <string name="theme_hint">Choose a theme. Changes apply immediately and are saved on this device.</string>
 </resources>
 

@@ -61,8 +61,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
-private val pageBackground = Color(0xFF08090B)
-private val surfaceColor = Color(0xFF191C20)
+private val pageBackground: Color
+    @Composable get() = appTheme.background
+private val surfaceColor: Color
+    @Composable get() = appTheme.surface
 private val mutedColor = Color(0xFFB7B3BC)
 
 class MainActivity : ComponentActivity() {
@@ -82,7 +84,7 @@ class MainActivity : ComponentActivity() {
         window.navigationBarColor = android.graphics.Color.rgb(9, 9, 14)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         hideSystemBars()
-        setContent { LanguageHost(onExit = { finishAndRemoveTask() }) { SegaIptvApp() } }
+        setContent { LanguageHost(onExit = { finishAndRemoveTask() }) { ThemeHost { SegaIptvApp() } } }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -122,7 +124,7 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
     var playing by remember { mutableStateOf<Channel?>(null) }
     val categoryMemory = remember { CategoryMemory() }
     var favorites by remember { mutableStateOf(identity.readFavorites()) }
-    val color = Color(0xFFE5BE77)
+    val color = appTheme.accent
     val allChannels = remember(remoteChannels, localChannels, selectedChannels) { (remoteChannels + localChannels + selectedChannels).distinctBy { it.url } }
     val isTv = remember(context) {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
@@ -256,7 +258,7 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
                     )
                 }
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
-                    listOf(Color(0xFF111315).copy(alpha = .91f), Color(0xFF0D0F11).copy(alpha = .96f), pageBackground)
+                    listOf(appTheme.surface.copy(alpha = .91f), appTheme.background.copy(alpha = .96f), pageBackground)
                 )))
 
                 val currentPlayback = playing

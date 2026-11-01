@@ -72,7 +72,7 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
     if (synopsisOpen && detail != null) SynopsisDialog(detail.title,
         synopsis.ifBlank { tr(R.string.no_synopsis) }) { synopsisOpen = false }
     BackHandler(detail != null) { detailId = null }
-    Column(modifier.fillMaxSize().background(Color(0xFF08090B))) {
+    Column(modifier.fillMaxSize().background(appTheme.background)) {
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = v3Gold)
         if (warnings.isNotBlank()) Text(statusText(warnings), color = v3Gold, fontSize = 10.sp, maxLines = 2)
         Text(tr(if (series) R.string.series_counts else R.string.movie_counts, groups.size, allTitles.size),
@@ -167,7 +167,7 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
 @Composable
 private fun PosterArtwork(title: VodTitle, modifier: Modifier) {
     var imageLoaded by remember(title.cover) { mutableStateOf(false) }
-    Box(modifier.background(Color(0xFF24282D)), contentAlignment = Alignment.Center) {
+    Box(modifier.background(appTheme.row), contentAlignment = Alignment.Center) {
         if (!imageLoaded) Text(tr(R.string.no_cover), color = Color.LightGray, fontSize = 11.sp,
             modifier = Modifier.padding(10.dp))
         if (title.cover.isNotBlank()) AsyncImage(title.cover, title.title,

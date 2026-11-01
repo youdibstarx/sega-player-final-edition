@@ -99,5 +99,10 @@
     <string name="decoder_unavailable">Décodage impossible sur cet appareil. Essayez une autre version ou un lecteur externe.</string>
     <string name="external_player">Ouvrir avec un autre lecteur</string>
     <string name="no_external_player">Aucun lecteur compatible installé.</string>
+    <string name="appearance_theme">Thème</string>
+    <string name="theme_classic">Or classique</string>
+    <string name="theme_ocean">Bleu océan</string>
+    <string name="theme_emerald">Vert émeraude</string>
+    <string name="theme_hint">Le thème est appliqué immédiatement et mémorisé sur cet appareil.</string>
 </resources>
 

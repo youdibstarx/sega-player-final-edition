@@ -99,5 +99,10 @@
     <string name="decoder_unavailable">تعذّر فك ترميز هذا المحتوى على الجهاز. جرّب نسخة أخرى أو مشغّلاً خارجياً.</string>
     <string name="external_player">فتح بمشغّل آخر</string>
     <string name="no_external_player">لا يوجد مشغّل متوافق مثبت.</string>
+    <string name="appearance_theme">مظهر التطبيق</string>
+    <string name="theme_classic">الذهبي الكلاسيكي</string>
+    <string name="theme_ocean">الأزرق البحري</string>
+    <string name="theme_emerald">الأخضر الزمردي</string>
+    <string name="theme_hint">اختر مظهر التطبيق. يطبق فوراً ويحفظ على هذا الجهاز.</string>
 </resources>
 
