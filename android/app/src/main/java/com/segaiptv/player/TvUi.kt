@@ -2,6 +2,7 @@ package com.segaiptv.player
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -139,7 +140,7 @@ private fun TvLanding(config: AppConfig, identity: DeviceIdentity, channelCount:
         }
         Spacer(Modifier.height(18.dp))
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            val cardHeight = minOf(maxHeight * .90f, ((maxWidth - 50.dp) / 6f) * (464f / 400f))
+            val cardHeight = minOf(maxHeight * .84f, ((maxWidth - 50.dp) / 6f) * (464f / 400f))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 val tiles = listOf(
@@ -200,8 +201,11 @@ private fun TvLandingShortcut(icon: String, label: String, accent: Color, modifi
 private fun ThemeArtworkTile(artwork: Int, label: String, accent: Color,
     modifier: Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.035f else 1f, label = "artwork-focus")
-    Box(modifier.scale(scale).onFocusChanged { focused = it.isFocused }
+    // Reserve vertical room in TvLanding so the taller focused card stays inside the row area.
+    val heightScale by animateFloatAsState(
+        targetValue = if (focused) 1.16f else 1f,
+        animationSpec = tween(durationMillis = 180), label = "artwork-focus-height")
+    Box(modifier.scale(scaleX = 1f, scaleY = heightScale).onFocusChanged { focused = it.isFocused }
         .border(if (focused) 3.dp else 0.dp, if (focused) accent else Color.Transparent,
             RoundedCornerShape(16.dp))
         .clickable(onClick = onClick).padding(4.dp), contentAlignment = Alignment.Center) {
