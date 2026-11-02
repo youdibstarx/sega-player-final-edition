@@ -78,7 +78,7 @@ fun TvShell(
     val searchable = page in listOf("channels", "movies", "series", "favorites")
     val initialFocus = remember { FocusRequester() }
     LaunchedEffect(page) { initialFocus.requestFocus() }
-    Column(Modifier.fillMaxSize().background(appTheme.background).padding(8.dp)) {
+    Column(Modifier.fillMaxSize().background(appTheme.background.copy(alpha = .60f)).padding(8.dp)) {
         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             listOf("home" to tr(R.string.home), "channels" to tr(R.string.live_tv), "movies" to tr(R.string.movies), "series" to tr(R.string.series)).forEachIndexed { index, (id, label) ->
@@ -138,33 +138,23 @@ private fun TvLanding(config: AppConfig, identity: DeviceIdentity, channelCount:
             Text("● " + tr(R.string.active_device), fontSize = 13.sp, color = Color(0xFF75E2A8))
         }
         Spacer(Modifier.height(18.dp))
-        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            val tiles = listOf(
-                Triple("▣", tr(R.string.live_tv), "channels"),
-                Triple("▤", tr(R.string.movies), "movies"),
-                Triple("▥", tr(R.string.series), "series"),
-                Triple("♥", tr(R.string.favorites), "favorites"),
-                Triple("☷", tr(R.string.playlists), "playlists"),
-                Triple("⚙", tr(R.string.settings), "settings")
-            )
-            tiles.forEachIndexed { index, tile ->
-                TvFocusItem(
-                    onClick = { onPageChange(tile.third) },
-                    accent = accent,
-                    modifier = Modifier.weight(1f).fillMaxHeight(.70f)
-                        .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)
-                ) {
-                    Column(Modifier.fillMaxSize().background(
-                        if (index == 0) Brush.verticalGradient(listOf(appTheme.tileTop, appTheme.tileBottom)) else Brush.verticalGradient(listOf(appTheme.row, appTheme.panel)))
-                        .padding(5.dp), horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center) {
-                        Text(tile.first, fontSize = 35.sp, color = Color.White)
-                        Spacer(Modifier.height(12.dp))
-                        Text(tile.second, fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Center)
-
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            val cardHeight = minOf(maxHeight * .90f, ((maxWidth - 50.dp) / 6f) * (464f / 400f))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                val tiles = listOf(
+                    Triple(R.drawable.tile_live, tr(R.string.live_tv), "channels"),
+                    Triple(R.drawable.tile_movies, tr(R.string.movies), "movies"),
+                    Triple(R.drawable.tile_series, tr(R.string.series), "series"),
+                    Triple(R.drawable.tile_favorites, tr(R.string.favorites), "favorites"),
+                    Triple(R.drawable.tile_playlists, tr(R.string.playlists), "playlists"),
+                    Triple(R.drawable.tile_settings, tr(R.string.settings), "settings")
+                )
+                tiles.forEachIndexed { index, tile ->
+                    ThemeArtworkTile(tile.first, tile.second, accent,
+                        Modifier.weight(1f).height(cardHeight)
+                            .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)) {
+                        onPageChange(tile.third)
                     }
                 }
             }
@@ -202,6 +192,21 @@ private fun TvLandingShortcut(icon: String, label: String, accent: Color, modifi
             Text(icon, fontSize = 40.sp, color = accent)
             Text(label, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
+    }
+}
+
+/** Keep supplied artwork intact; localized content description labels the clickable card. */
+@Composable
+private fun ThemeArtworkTile(artwork: Int, label: String, accent: Color,
+    modifier: Modifier, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (focused) 1.035f else 1f, label = "artwork-focus")
+    Box(modifier.scale(scale).onFocusChanged { focused = it.isFocused }
+        .border(if (focused) 3.dp else 0.dp, if (focused) accent else Color.Transparent,
+            RoundedCornerShape(16.dp))
+        .clickable(onClick = onClick).padding(4.dp), contentAlignment = Alignment.Center) {
+        AsyncImage(model = artwork, contentDescription = label,
+            modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
     }
 }
 

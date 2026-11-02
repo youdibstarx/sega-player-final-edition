@@ -251,15 +251,11 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr, LocalContentColor provides Color.White) {
             Box(Modifier.fillMaxSize().background(pageBackground).safeDrawingPadding()) {
-                if (config.background.isNotBlank() && config.active) {
-                    AsyncImage(
-                        model = config.background, contentDescription = null,
-                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
-                    )
+                if (playing == null) {
+                    AsyncImage(model = appTheme.wallpaper, contentDescription = null,
+                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .22f)))
                 }
-                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
-                    listOf(appTheme.surface.copy(alpha = .91f), appTheme.background.copy(alpha = .96f), pageBackground)
-                )))
 
                 val currentPlayback = playing
                 if (currentPlayback != null) {

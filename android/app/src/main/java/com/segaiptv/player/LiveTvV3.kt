@@ -56,7 +56,7 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
     var epgOpen by remember(selectedUrl) { mutableStateOf(false) }
     val selected = remember(live, selectedUrl) { live.firstOrNull { it.url == selectedUrl } }
     if (epgOpen && selected != null) EpgDialog(selected) { epgOpen = false }
-    Column(modifier.fillMaxSize().background(appTheme.background)) {
+    Column(modifier.fillMaxSize().background(appTheme.background.copy(alpha = .60f))) {
         Text(tr(R.string.live_counts, groups.size, live.size), color = Color.LightGray,
             fontSize = 10.sp, modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp))
         if (warnings.isNotBlank()) Text(statusText(warnings), color = v3Gold, maxLines = 1, fontSize = 11.sp)

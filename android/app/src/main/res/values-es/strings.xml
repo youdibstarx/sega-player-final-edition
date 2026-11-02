@@ -100,7 +100,7 @@
     <string name="external_player">Abrir con otro reproductor</string>
     <string name="no_external_player">No hay reproductor compatible instalado.</string>
     <string name="appearance_theme">Tema</string>
-    <string name="theme_classic">Oro clásico</string>
+    <string name="theme_classic">Carbono rojo</string>
     <string name="theme_ocean">Azul océano</string>
     <string name="theme_emerald">Verde esmeralda</string>
     <string name="theme_hint">El tema se aplica al instante y se guarda en este dispositivo.</string>

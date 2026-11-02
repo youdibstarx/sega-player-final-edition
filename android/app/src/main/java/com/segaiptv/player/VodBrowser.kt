@@ -72,7 +72,7 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
     if (synopsisOpen && detail != null) SynopsisDialog(detail.title,
         synopsis.ifBlank { tr(R.string.no_synopsis) }) { synopsisOpen = false }
     BackHandler(detail != null) { detailId = null }
-    Column(modifier.fillMaxSize().background(appTheme.background)) {
+    Column(modifier.fillMaxSize().background(appTheme.background.copy(alpha = .60f))) {
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = v3Gold)
         if (warnings.isNotBlank()) Text(statusText(warnings), color = v3Gold, fontSize = 10.sp, maxLines = 2)
         Text(tr(if (series) R.string.series_counts else R.string.movie_counts, groups.size, allTitles.size),
