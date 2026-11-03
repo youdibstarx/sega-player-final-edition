@@ -104,5 +104,22 @@
     <string name="theme_ocean">الأزرق البحري</string>
     <string name="theme_emerald">الأخضر الزمردي</string>
     <string name="theme_hint">اختر مظهر التطبيق. يطبق فوراً ويحفظ على هذا الجهاز.</string>
+    <string name="preferences_group">المظهر واللغة</string>
+    <string name="channel_order">ترتيب القنوات</string>
+    <string name="order_provider">ترتيب المزوّد</string>
+    <string name="order_az">الاسم تصاعدياً</string>
+    <string name="order_za">الاسم تنازلياً</string>
+    <string name="order_manual">يدوي · اختر باقة</string>
+    <string name="order_edit">تعديل ترتيب القنوات</string>
+    <string name="order_save">حفظ الترتيب</string>
+    <string name="update_group">تحديث التطبيق</string>
+    <string name="update_check">البحث عن تحديث</string>
+    <string name="update_checking">جارٍ البحث عن تحديث…</string>
+    <string name="update_current">تستعمل آخر نسخة منشورة.</string>
+    <string name="update_available">تتوفر نسخة جديدة</string>
+    <string name="update_install">تحديث</string>
+    <string name="update_failed">تعذّر التحقق من التحديث أو تثبيته. أعد المحاولة.</string>
+    <string name="update_downloading">جارٍ تنزيل ملف التطبيق والتحقق منه…</string>
+    <string name="update_permission">اسمح بالتثبيت من هذا التطبيق ثم ارجع واضغط على تحديث.</string>
 </resources>
 

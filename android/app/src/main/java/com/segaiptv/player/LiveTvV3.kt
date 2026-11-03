@@ -40,7 +40,7 @@ fun TvAction(label: String, modifier: Modifier = Modifier, selected: Boolean = f
 @Composable
 fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Boolean,
     favorites: Set<String>, warnings: String, onPlay: (Channel) -> Unit,
-    onToggleFavorite: (Channel) -> Unit, includeVod: Boolean = false, search: String = "", showCategories: Boolean = true) {
+    onToggleFavorite: (Channel) -> Unit, includeVod: Boolean = false, search: String = "", showCategories: Boolean = true, orderScope: String? = null) {
     val live = remember(channels, includeVod) {
         if (includeVod) channels else channels.filter { !isVodEntry(it, false) && !isVodEntry(it, true) }
     }
@@ -49,10 +49,11 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
     var onlyFavorites by rememberSaveable { mutableStateOf(false) }
     var selectedUrl by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(groups) { if (category !in groups) category = groups.keys.firstOrNull() }
-    val visible = remember(live, groups, category, onlyFavorites, favorites, search) {
+    val filtered = remember(live, groups, category, onlyFavorites, favorites, search) {
         (if (onlyFavorites) live.filter { it.url in favorites } else if (search.isNotBlank()) live else groups[category].orEmpty())
             .filter { search.isBlank() || it.name.contains(search, true) }
     }
+    val visible = if (orderScope == null) filtered else orderedChannels(orderScope, filtered, live, search.isBlank() && !onlyFavorites)
     var epgOpen by remember(selectedUrl) { mutableStateOf(false) }
     val selected = remember(live, selectedUrl) { live.firstOrNull { it.url == selectedUrl } }
     if (epgOpen && selected != null) EpgDialog(selected) { epgOpen = false }

@@ -104,5 +104,22 @@
     <string name="theme_ocean">Bleu océan</string>
     <string name="theme_emerald">Vert émeraude</string>
     <string name="theme_hint">Le thème est appliqué immédiatement et mémorisé sur cet appareil.</string>
+    <string name="preferences_group">Apparence et langue</string>
+    <string name="channel_order">Ordre des chaînes</string>
+    <string name="order_provider">Ordre du fournisseur</string>
+    <string name="order_az">Nom A → Z</string>
+    <string name="order_za">Nom Z → A</string>
+    <string name="order_manual">Personnalisé · choisir un bouquet</string>
+    <string name="order_edit">Réorganiser les chaînes</string>
+    <string name="order_save">Enregistrer</string>
+    <string name="update_group">Mises à jour</string>
+    <string name="update_check">Vérifier les mises à jour</string>
+    <string name="update_checking">Recherche en cours…</string>
+    <string name="update_current">Votre application est à jour.</string>
+    <string name="update_available">Nouvelle version disponible</string>
+    <string name="update_install">Mettre à jour</string>
+    <string name="update_failed">Vérification ou installation impossible. Réessayez.</string>
+    <string name="update_downloading">Téléchargement et vérification du fichier APK…</string>
+    <string name="update_permission">Autorisez cette source puis revenez et choisissez Mettre à jour.</string>
 </resources>
 

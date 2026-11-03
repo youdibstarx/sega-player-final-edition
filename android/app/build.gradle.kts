@@ -14,8 +14,8 @@ android {
         applicationId = "com.segaiptv.player"
         minSdk = 26
         targetSdk = 35
-        versionCode = 29
-        versionName = "0.5.11"
+        versionCode = 30
+        versionName = "0.5.12"
         // Android Emulator: 10.0.2.2; physical device: your PC LAN IP / domain.
         val backendUrl = providers.gradleProperty("SEGA_IPTV_BACKEND_URL")
             .orElse("https://sega.faster4k.xyz").get()

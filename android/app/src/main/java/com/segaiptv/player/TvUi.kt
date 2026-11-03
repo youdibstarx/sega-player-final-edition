@@ -69,6 +69,7 @@ fun TvShell(
     refreshToken: Int = 0, onCategoryLoaded: (List<Channel>) -> Unit = {},
     categoryMemory: CategoryMemory = remember { CategoryMemory() }
 ) {
+    val updates = rememberUpdatePrompt()
     if (page == "home") {
         TvLanding(config, identity, channels.size, loading, accent, onPageChange, onRefresh, onPlay, channels)
         return
@@ -104,8 +105,8 @@ fun TvShell(
             "favorites" -> LiveTvV3(Modifier.weight(1f), channels.filter { it.url in favorites }, loading,
                 favorites, catalogueWarnings(warnings), onPlay, onToggleFavorite, includeVod = true, search = query)
             "playlists" -> PlaylistScreen(config, loading, warnings, onRefresh, onLocalFile, Modifier.weight(1f))
-            else -> TvSettings(config, identity, channels.size, accent, error, onLocalFile,
-                onCopyMac, onCopyKey, Modifier.weight(1f), channels, warnings, loading)
+            else -> TvSettings(config, identity, channels.size, accent, error,
+                onCopyMac, onCopyKey, Modifier.weight(1f), channels, warnings, loading, updates, { onPageChange("channels") })
         }
     }
     if (searchOpen) {
@@ -162,8 +163,7 @@ private fun TvLanding(config: AppConfig, identity: DeviceIdentity, channelCount:
         }
         WatchHistory(onPlay, channels)
         Spacer(Modifier.height(10.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("MAC: ${identity.virtualMac}", fontSize = 12.sp, color = tvMuted)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TvAction("↻ " + tr(R.string.refresh), onClick = onRefresh)
                 TvAction("⏻ " + tr(R.string.exit_app), onClick = onExit)
@@ -371,11 +371,11 @@ private fun TvChannelGrid(channels: List<Channel>, accent: Color, favorites: Set
 
 @Composable
 private fun TvSettings(config: AppConfig, identity: DeviceIdentity, count: Int,
-    accent: Color, error: String, onLocalFile: () -> Unit,
+    accent: Color, error: String,
     onCopyMac: () -> Unit, onCopyKey: () -> Unit, modifier: Modifier,
-    channels: List<Channel>, warnings: String, loading: Boolean
+    channels: List<Channel>, warnings: String, loading: Boolean, checkUpdates: () -> Unit, openChannels: () -> Unit
 ) {
-    Column(modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(6.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
         Text(tr(R.string.device_settings), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             CompactIdentity(tr(R.string.virtual_mac), identity.virtualMac, Modifier.weight(1f), onCopyMac)
@@ -386,14 +386,11 @@ private fun TvSettings(config: AppConfig, identity: DeviceIdentity, count: Int,
             TvInformation(tr(R.string.expires), config.expires.substringBefore('T').substringBefore(' ').ifBlank { tr(R.string.unspecified) }, Modifier.weight(1f))
             TvInformation(tr(R.string.channels), "$count", Modifier.weight(1f))
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TvAction(tr(R.string.import_m3u), Modifier.weight(1f), onClick = onLocalFile)
-            LanguagePicker()
-            ViewerSettings(channels, warnings, error, loading)
-        }
-        ThemePicker()
-        if (error.isNotBlank()) Text(statusText(error), color = Color(0xFFFFC5AD), fontSize = 11.sp, maxLines = 1)
         Text(tr(R.string.copy_hint), color = tvMuted, fontSize = 10.sp)
+        SettingsGroup(tr(R.string.preferences_group)) { LanguagePicker(); ThemePicker() }
+        SettingsGroup(tr(R.string.channels)) { ChannelOrderPicker(openChannels); ViewerSettings(channels, warnings, error, loading) }
+        SettingsGroup(tr(R.string.update_group)) { TvAction(tr(R.string.update_check), onClick = checkUpdates) }
+        if (error.isNotBlank()) Text(statusText(error), color = Color(0xFFFFC5AD), fontSize = 11.sp, maxLines = 1)
     }
 }
 

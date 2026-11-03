@@ -133,7 +133,7 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
                 // Child browsers keep their content layout without duplicating the category rail.
                 key(selectedKey) {
                     if (kind == "live") LiveTvV3(Modifier.weight(1f), visible, entriesLoading, favorites, "", onPlay, onToggleFavorite,
-                        search = query, showCategories = false)
+                        search = query, showCategories = false, orderScope = selectedKey)
                     else VodBrowser(Modifier.weight(1f), visible, kind == "series", accent, onPlay,
                         favorites = favorites, onToggleFavorite = onToggleFavorite, loading = entriesLoading, query = query,
                         showCategories = false)

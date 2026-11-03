@@ -104,5 +104,22 @@
     <string name="theme_ocean">Azul océano</string>
     <string name="theme_emerald">Verde esmeralda</string>
     <string name="theme_hint">El tema se aplica al instante y se guarda en este dispositivo.</string>
+    <string name="preferences_group">Apariencia e idioma</string>
+    <string name="channel_order">Orden de canales</string>
+    <string name="order_provider">Orden del proveedor</string>
+    <string name="order_az">Nombre A → Z</string>
+    <string name="order_za">Nombre Z → A</string>
+    <string name="order_manual">Personalizado · elegir un grupo</string>
+    <string name="order_edit">Reordenar canales</string>
+    <string name="order_save">Guardar orden</string>
+    <string name="update_group">Actualizaciones</string>
+    <string name="update_check">Buscar actualizaciones</string>
+    <string name="update_checking">Buscando actualizaciones…</string>
+    <string name="update_current">La aplicación está actualizada.</string>
+    <string name="update_available">Nueva versión disponible</string>
+    <string name="update_install">Actualizar</string>
+    <string name="update_failed">No se pudo comprobar o instalar la actualización. Inténtalo de nuevo.</string>
+    <string name="update_downloading">Descargando y verificando el APK…</string>
+    <string name="update_permission">Permite esta fuente, vuelve y pulsa Actualizar.</string>
 </resources>
 

@@ -104,5 +104,22 @@
     <string name="theme_ocean">Ocean Blue</string>
     <string name="theme_emerald">Emerald Green</string>
     <string name="theme_hint">Choose a theme. Changes apply immediately and are saved on this device.</string>
+    <string name="preferences_group">Appearance and language</string>
+    <string name="channel_order">Channel order</string>
+    <string name="order_provider">Provider order</string>
+    <string name="order_az">Name A → Z</string>
+    <string name="order_za">Name Z → A</string>
+    <string name="order_manual">Custom · choose a category</string>
+    <string name="order_edit">Reorder channels</string>
+    <string name="order_save">Save order</string>
+    <string name="update_group">App updates</string>
+    <string name="update_check">Check for updates</string>
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_current">You have the latest published version.</string>
+    <string name="update_available">A new version is available</string>
+    <string name="update_install">Update</string>
+    <string name="update_failed">Could not check or install the update. Try again.</string>
+    <string name="update_downloading">Downloading and verifying the APK…</string>
+    <string name="update_permission">Allow installation from this app, then return and tap Update.</string>
 </resources>
 
