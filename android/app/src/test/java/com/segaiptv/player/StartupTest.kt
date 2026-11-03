@@ -109,7 +109,7 @@ class StartupTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithContentDescription("Settings").performClick()
-        for (label in listOf("Virtual MAC", "Device Key", "Language: English", "Theme:",
+        for (label in listOf("Virtual MAC  ⧉", "Device Key  ⧉", "Language: English", "Theme:",
             "Channel order", "Viewing options", "Check for updates")) {
             compose.onNodeWithText(label, substring = true).assertIsDisplayed()
         }
