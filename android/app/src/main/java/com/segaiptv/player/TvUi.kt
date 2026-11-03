@@ -375,22 +375,34 @@ private fun TvSettings(config: AppConfig, identity: DeviceIdentity, count: Int,
     onCopyMac: () -> Unit, onCopyKey: () -> Unit, modifier: Modifier,
     channels: List<Channel>, warnings: String, loading: Boolean, checkUpdates: () -> Unit, openChannels: () -> Unit
 ) {
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(6.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        Text(tr(R.string.device_settings), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            CompactIdentity(tr(R.string.virtual_mac), identity.virtualMac, Modifier.weight(1f), onCopyMac)
-            CompactIdentity(tr(R.string.device_key), identity.key, Modifier.weight(1f), onCopyKey)
+    Row(modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(tr(R.string.device_settings), color = accent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                CompactIdentity(tr(R.string.virtual_mac), identity.virtualMac, Modifier.weight(1.15f), onCopyMac)
+                CompactIdentity(tr(R.string.device_key), identity.key, Modifier.weight(1f), onCopyKey)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                TvInformation(tr(R.string.subscription), if (config.active) tr(R.string.active) else tr(R.string.inactive), Modifier.weight(1f))
+                TvInformation(tr(R.string.expires), config.expires.substringBefore('T').substringBefore(' ').ifBlank { tr(R.string.unspecified) }, Modifier.weight(1.3f))
+                TvInformation(tr(R.string.channels), "$count", Modifier.weight(.85f))
+            }
+            Text(tr(R.string.copy_hint), color = tvMuted, fontSize = 10.sp)
+            if (error.isNotBlank()) Text(statusText(error), color = Color(0xFFFFC5AD), fontSize = 11.sp, maxLines = 1)
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TvInformation(tr(R.string.subscription), if (config.active) tr(R.string.active) else tr(R.string.inactive), Modifier.weight(1f))
-            TvInformation(tr(R.string.expires), config.expires.substringBefore('T').substringBefore(' ').ifBlank { tr(R.string.unspecified) }, Modifier.weight(1f))
-            TvInformation(tr(R.string.channels), "$count", Modifier.weight(1f))
+        Column(Modifier.weight(1.1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            SettingsGroup(tr(R.string.preferences_group)) {
+                LanguagePicker(Modifier.weight(1f))
+                ThemePicker(Modifier.weight(1f))
+            }
+            SettingsGroup(tr(R.string.channels)) {
+                ChannelOrderPicker(openChannels, Modifier.weight(1.25f))
+                ViewerSettings(channels, warnings, error, loading, Modifier.weight(1f))
+            }
+            SettingsGroup(tr(R.string.update_group)) {
+                TvAction(tr(R.string.update_check), Modifier.fillMaxWidth(), onClick = checkUpdates)
+            }
         }
-        Text(tr(R.string.copy_hint), color = tvMuted, fontSize = 10.sp)
-        SettingsGroup(tr(R.string.preferences_group)) { LanguagePicker(); ThemePicker() }
-        SettingsGroup(tr(R.string.channels)) { ChannelOrderPicker(openChannels); ViewerSettings(channels, warnings, error, loading) }
-        SettingsGroup(tr(R.string.update_group)) { TvAction(tr(R.string.update_check), onClick = checkUpdates) }
-        if (error.isNotBlank()) Text(statusText(error), color = Color(0xFFFFC5AD), fontSize = 11.sp, maxLines = 1)
     }
 }
 

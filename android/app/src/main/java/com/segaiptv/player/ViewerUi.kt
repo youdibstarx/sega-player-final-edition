@@ -80,7 +80,7 @@ internal fun PinDialog(setup: Boolean = false, onClose: () -> Unit, onSuccess: (
 }
 
 @Composable
-internal fun ViewerSettings(channels: List<Channel>, warnings: String, error: String, loading: Boolean) {
+internal fun ViewerSettings(channels: List<Channel>, warnings: String, error: String, loading: Boolean, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val store = remember { ViewerStore.get(context) }
     var open by remember { mutableStateOf(false) }
@@ -88,7 +88,7 @@ internal fun ViewerSettings(channels: List<Channel>, warnings: String, error: St
     var manage by remember { mutableStateOf(false) }
     var diagnostics by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
-    TvAction(fx("viewer_settings")) { open = true }
+    TvAction(fx("viewer_settings"), modifier) { open = true }
     if (pinMode != null) PinDialog(setup = pinMode == "setup", onClose = { pinMode = null }) {
         val setup = pinMode == "setup"
         pinMode = null

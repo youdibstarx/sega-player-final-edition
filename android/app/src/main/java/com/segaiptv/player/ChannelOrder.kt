@@ -18,9 +18,9 @@ import java.security.MessageDigest
 
 @Composable
 internal fun SettingsGroup(title: String, content: @Composable RowScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().background(appTheme.surface, RoundedCornerShape(12.dp)).padding(10.dp)) {
+    Column(Modifier.fillMaxWidth().background(appTheme.surface, RoundedCornerShape(12.dp)).padding(horizontal = 6.dp, vertical = 3.dp)) {
         Text(title, color = appTheme.accent, fontSize = 13.sp)
-        Spacer(Modifier.height(5.dp))
+        Spacer(Modifier.height(2.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, content = content)
     }
 }
@@ -32,11 +32,11 @@ private enum class Order(val title: Int) {
 private fun orderPrefs() = LocalContext.current.getSharedPreferences("channel_order", Context.MODE_PRIVATE)
 
 @Composable
-internal fun ChannelOrderPicker(openChannels: () -> Unit) {
+internal fun ChannelOrderPicker(openChannels: () -> Unit, modifier: Modifier = Modifier) {
     val prefs = orderPrefs()
     var mode by remember { mutableStateOf(prefs.getString("mode", Order.PROVIDER.name)) }
     var open by remember { mutableStateOf(false) }
-    TvAction(tr(R.string.channel_order) + " · " + tr(Order.entries.firstOrNull { it.name == mode }?.title ?: R.string.order_provider)) { open = true }
+    TvAction(tr(R.string.channel_order) + " · " + tr(Order.entries.firstOrNull { it.name == mode }?.title ?: R.string.order_provider), modifier) { open = true }
     if (open) AlertDialog(onDismissRequest = { open = false }, title = { Text(tr(R.string.channel_order)) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Order.entries.forEach { option ->

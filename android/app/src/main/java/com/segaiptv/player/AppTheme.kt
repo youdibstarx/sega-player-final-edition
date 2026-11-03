@@ -47,10 +47,10 @@ internal fun ThemeHost(content: @Composable () -> Unit) {
 }
 
 @Composable
-internal fun ThemePicker() {
+internal fun ThemePicker(modifier: Modifier = Modifier) {
     val selection = LocalThemeSelection.current
     var open by remember { mutableStateOf(false) }
-    TvAction(tr(R.string.appearance_theme) + ": " + tr(selection.theme.label)) { open = true }
+    TvAction(tr(R.string.appearance_theme) + ": " + tr(selection.theme.label), modifier) { open = true }
     if (open) AlertDialog(
         onDismissRequest = { open = false },
         title = { Text(tr(R.string.appearance_theme)) },

@@ -50,10 +50,10 @@ internal fun tr(@StringRes id: Int, vararg args: Any): String {
 }
 
 @Composable
-internal fun LanguagePicker() {
+internal fun LanguagePicker(modifier: Modifier = Modifier) {
     val language = LocalAppLanguage.current
     var open by remember { mutableStateOf(false) }
-    TvAction(tr(R.string.language) + ": " + supportedLanguages[language.code]) { open = true }
+    TvAction(tr(R.string.language) + ": " + supportedLanguages[language.code], modifier) { open = true }
     if (open) AlertDialog(onDismissRequest = { open = false },
         title = { Text(tr(R.string.language)) },
         text = {

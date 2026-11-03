@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import org.junit.Before
 import org.junit.Rule
@@ -95,6 +96,24 @@ class StartupTest {
         compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
         store.verify("1234")
         store.clearLocks()
+    }
+
+    @Test fun settingsActionsFitOnLandscapePhoneWithoutScrolling() {
+        compose.setContent {
+            LanguageHost(onExit = {}) {
+                SegaIptvApp(loadConfig = { AppConfig(active = true) })
+            }
+        }
+        compose.waitUntil(10000) {
+            compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Settings"))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription("Settings").performClick()
+        for (label in listOf("Virtual MAC", "Device Key", "Language: English", "Theme:",
+            "Channel order", "Viewing options", "Check for updates")) {
+            compose.onNodeWithText(label, substring = true).assertIsDisplayed()
+        }
+        compose.onAllNodes(androidx.compose.ui.test.hasScrollAction()).assertCountEquals(0)
     }
 
     @Test fun activatedStartupReachesHomeAndExitCallback() {
