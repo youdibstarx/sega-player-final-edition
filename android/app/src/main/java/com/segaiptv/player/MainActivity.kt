@@ -115,6 +115,7 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
     var remoteChannels by remember { mutableStateOf<List<Channel>>(emptyList()) }
     var selectedChannels by remember { mutableStateOf<List<Channel>>(emptyList()) }
     var localChannels by remember { mutableStateOf<List<Channel>>(emptyList()) }
+    var verifiedAt by remember { mutableStateOf<Long?>(null) }
     var refreshToken by remember { mutableIntStateOf(0) }
     var activationToken by remember { mutableIntStateOf(0) }
     var catalogueToken by remember { mutableIntStateOf(-1) }
@@ -136,6 +137,32 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
         page = "home"
     }
 
+    fun clearAccess() {
+        categoryMemory.clear()
+        playing = null
+        config = AppConfig()
+        remoteChannels = emptyList()
+        selectedChannels = emptyList()
+        localChannels = emptyList()
+        catalogueSources = null
+        catalogueToken = -1
+        page = "home"
+    }
+
+    LaunchedEffect(verifiedAt) {
+        val verified = verifiedAt ?: return@LaunchedEffect
+        while (true) {
+            val remaining = AccessGrace.remaining(verified, android.os.SystemClock.elapsedRealtime())
+            if (remaining == 0L) {
+                clearAccess()
+                message = "تعذر تجديد التحقق من الاشتراك. اتصل بالخادم لإعادة التحقق."
+                break
+            }
+            // Recheck monotonic time after resume, including time spent in deep sleep.
+            delay(minOf(remaining, 60_000L))
+        }
+    }
+
     LaunchedEffect(Unit) {
         while (true) {
             delay(5 * 60 * 1000L)
@@ -149,6 +176,7 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
         message = ""
         try {
             val freshConfig = loadConfig(identity)
+            verifiedAt = android.os.SystemClock.elapsedRealtime()
             config = freshConfig
             hasLoadedOnce = true
             loading = false
@@ -204,16 +232,11 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
             }
         } catch (ex: Exception) {
             if (ex is CancellationException) throw ex
-            if (ex is BackendAccessDenied) {
-                categoryMemory.clear()
-                playing = null
-                config = AppConfig()
-                remoteChannels = emptyList()
-                selectedChannels = emptyList()
-                localChannels = emptyList()
-                catalogueSources = null
-                catalogueToken = -1
-                page = "home"
+            val lastVerified = verifiedAt
+            val graceExpired = lastVerified == null ||
+                AccessGrace.remaining(lastVerified, android.os.SystemClock.elapsedRealtime()) == 0L
+            if (ex is BackendAccessDenied || graceExpired) {
+                clearAccess()
             }
             hasLoadedOnce = true
             loading = false

@@ -89,6 +89,7 @@ def initialize():
     with database() as db:
         db.execute("PRAGMA journal_mode=WAL")
         db.executescript("""
+        CREATE TABLE IF NOT EXISTS trial_claims (token TEXT PRIMARY KEY, device_id TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS devices (
             id TEXT PRIMARY KEY,
             mac_alias TEXT NOT NULL,
@@ -165,6 +166,7 @@ def now_iso() -> str:
 class DeviceRegistration(BaseModel):
     device_id: str = Field(min_length=30, max_length=80, pattern=r"^[A-Za-z0-9-]+$")
     mac_alias: str = Field(pattern=r"^[0-9A-F]{2}(:[0-9A-F]{2}){5}$")
+    trial_token: Optional[str] = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     device_key: str = Field(min_length=6, max_length=128)
 
     @field_validator("device_key")
@@ -281,12 +283,24 @@ async def register(device: DeviceRegistration, request: Request):
     await check_proof(device.device_id, request)
     with database() as db:
         db.execute("BEGIN IMMEDIATE")
-        entitlement = db.execute("SELECT trial_used FROM subscriptions WHERE device_id=?", (device.device_id,)).fetchone()
+        entitlement = db.execute("SELECT trial_used,plan FROM subscriptions WHERE device_id=?", (device.device_id,)).fetchone()
+        if entitlement and entitlement["trial_used"] and entitlement["plan"] != "pending" and device.trial_token:
+            db.execute("INSERT OR IGNORE INTO trial_claims(token,device_id) VALUES(?,?)",
+                       (device.trial_token, device.device_id))
         if entitlement and not entitlement["trial_used"]:
-            today = datetime.now(timezone.utc).date()
-            expiry = add_months(today, 1) - timedelta(days=1)
-            db.execute("UPDATE devices SET active=1,expires_at=? WHERE id=?", (expiry.isoformat(), device.device_id))
-            db.execute("UPDATE subscriptions SET trial_used=1,trial_started_at=?,plan='trial' WHERE device_id=?", (now_iso(), device.device_id))
+            claimed = False
+            if device.trial_token:
+                claim = db.execute("INSERT OR IGNORE INTO trial_claims(token,device_id) VALUES(?,?)",
+                                   (device.trial_token, device.device_id))
+                claimed = claim.rowcount == 1
+            if not claimed:
+                db.execute("UPDATE subscriptions SET trial_used=?,plan='pending' WHERE device_id=?",
+                           (int(bool(device.trial_token)), device.device_id))
+            else:
+                today = datetime.now(timezone.utc).date()
+                expiry = add_months(today, 1) - timedelta(days=1)
+                db.execute("UPDATE devices SET active=1,expires_at=? WHERE id=?", (expiry.isoformat(), device.device_id))
+                db.execute("UPDATE subscriptions SET trial_used=1,trial_started_at=?,plan='trial' WHERE device_id=?", (now_iso(), device.device_id))
         row = db.execute("SELECT active,expires_at FROM devices WHERE id=?", (device.device_id,)).fetchone()
     return {"registered": True, "activation_required": not enabled_device(row)}
 
@@ -337,6 +351,12 @@ def admin_state(_: bool = Depends(admin_only)):
             "SELECT id,name,url,is_global,created_at FROM playlists ORDER BY id DESC").fetchall()]
         assignments = [dict(row) for row in db.execute("SELECT device_id,playlist_id FROM device_playlists")]
         settings = dict(db.execute("SELECT * FROM settings WHERE id=1").fetchone())
+    for device in devices:
+        device["effective_active"] = enabled_device(device)
+        device["status"] = ("pending" if not device["active"] and device["plan"] == "pending"
+                            else "disabled" if not device["active"]
+                            else "expired" if not device["effective_active"]
+                            else "trial" if device["plan"] == "trial" else "active")
     return {"devices": devices, "playlists": playlists, "assignments": assignments, "settings": settings}
 
 
@@ -482,6 +502,11 @@ def portal_delete(device=Depends(portal_device)):
     with database() as db:
         db.execute("DELETE FROM personal_playlists WHERE device_id=?", (device["id"],))
     return {"deleted": True}
+
+
+@APP.get("/api/v1/time")
+def server_time():
+    return {"unix_seconds": int(datetime.now(timezone.utc).timestamp())}
 
 
 @APP.get("/health")

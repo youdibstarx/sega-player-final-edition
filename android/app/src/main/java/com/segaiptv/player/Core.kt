@@ -35,7 +35,7 @@ data class AppConfig(
     val playlists: List<Playlist> = emptyList()
 )
 
-class DeviceIdentity(private val context: Context) {
+class DeviceIdentity(internal val context: Context) {
     private val prefs = context.getSharedPreferences("segaiptv_identity", Context.MODE_PRIVATE)
     val id: String by lazy {
         prefs.getString("device_id", null) ?: UUID.randomUUID().toString().also {
@@ -74,10 +74,19 @@ object Api {
             put("device_id", identity.id)
             put("mac_alias", identity.virtualMac)
             put("device_key", identity.key)
+            val androidId = android.provider.Settings.Secure.getString(
+                identity.context.contentResolver, android.provider.Settings.Secure.ANDROID_ID)
+            if (!androidId.isNullOrBlank()) put("trial_token",
+                MessageDigest.getInstance("SHA-256").digest(("sega-trial-v1:" + androidId).toByteArray())
+                    .joinToString("") { "%02x".format(it.toInt() and 255) })
         }
         fun signedRequest(path: String, method: String, body: String? = null, key: String? = null): JSONObject {
             val proof = if (BuildConfig.DEVICE_PROOF) DeviceProof.headers(identity.id, method, path, body) else emptyMap()
             return BackendTransport.request(BackendAddress.value(), path, method, body, key, proof)
+        }
+        if (BuildConfig.DEVICE_PROOF) {
+            val serverTime = BackendTransport.request(BackendAddress.value(), "/api/v1/time", "GET")
+            DeviceProof.synchronize(serverTime.getLong("unix_seconds"))
         }
         signedRequest("/api/v1/register", "POST", payload.toString())
         val response = signedRequest("/api/v1/config?device_id=${identity.id}", "GET", key = identity.key)
