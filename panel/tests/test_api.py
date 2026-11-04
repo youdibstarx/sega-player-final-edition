@@ -32,6 +32,7 @@ class PanelApiTests(unittest.TestCase):
     def test_full_lifecycle(self):
         identity = {
             "device_id": str(uuid.uuid4()),
+            "trial_token": uuid.uuid4().hex * 2,
             "mac_alias": "12:23:34:45:56:67",
             "device_key": "sample-key-with-more-than-thirty-characters-00001"
         }

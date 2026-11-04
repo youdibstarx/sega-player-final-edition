@@ -13,6 +13,8 @@ import java.util.UUID
 
 /** Proof of possession of an approved installation key, NOT app attestation. */
 internal object DeviceProof {
+    private val clock = ServerClock { android.os.SystemClock.elapsedRealtime() }
+    fun synchronize(seconds: Long) = clock.synchronize(seconds)
     private const val ALIAS = "sega_v3_request_signing_v1"
     internal fun canonical(id: String, method: String, path: String, body: String, time: String, nonce: String): ByteArray {
         val digest = MessageDigest.getInstance("SHA-256").digest(body.toByteArray(Charsets.UTF_8))
@@ -38,7 +40,7 @@ internal object DeviceProof {
                     .setDigests(KeyProperties.DIGEST_SHA256).build())
             }.generateKeyPair()
         }
-        val time = (System.currentTimeMillis() / 1000).toString()
+        val time = clock.seconds().toString()
         val nonce = UUID.randomUUID().toString()
         val key = ks.getKey(ALIAS, null) as PrivateKey
         return mapOf("X-Proof-Time" to time, "X-Proof-Nonce" to nonce,
