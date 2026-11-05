@@ -103,7 +103,7 @@ class SecurityTests(unittest.TestCase):
         status_path='/admin/api/proofs'
         self.assertEqual(self.client.get(status_path).status_code,401)
         proof_state=self.client.get(status_path,headers=self.auth).json()
-        self.assertEqual(proof_state['pending'],[{'device':self.identity['device_id'],'fingerprint':fp}])
+        self.assertEqual(proof_state['pending'],[{'device':self.identity['device_id'],'fingerprint':fp,'label':'','mac_alias':self.identity['mac_alias']}])
         self.assertEqual(proof_state['approved'],[])
         self.assertFalse(proof_state['required'])
         path=f"/admin/api/devices/{self.identity['device_id']}/proof"
@@ -112,7 +112,7 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(self.client.post(path,json={'fingerprint':fp},headers=self.headers).status_code,200)
         proof_state=self.client.get(status_path,headers=self.auth).json()
         self.assertEqual(proof_state['pending'],[])
-        self.assertEqual(proof_state['approved'],[{'device':self.identity['device_id'],'fingerprint':fp}])
+        self.assertEqual(proof_state['approved'],[{'device':self.identity['device_id'],'fingerprint':fp,'label':'','mac_alias':self.identity['mac_alias']}])
         self.assertEqual(self.client.post(path,json={'fingerprint':fp},headers=self.headers).status_code,409)
         with patch.dict(os.environ,{'DEVICE_PROOF_REQUIRED':'true'}):
             self.assertTrue(self.client.get(status_path,headers=self.auth).json()['required'])

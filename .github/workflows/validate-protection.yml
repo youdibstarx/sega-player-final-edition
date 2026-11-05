@@ -56,3 +56,13 @@ jobs:
         working-directory: panel
 
 
+      - name: Package panel update without databases or environment files
+        uses: actions/upload-artifact@v4
+        with:
+          name: SEGA-panel-update-0.5.15
+          path: |
+            panel/main.py
+            panel/static/app.js
+            panel/static/admin.html
+            panel/UPDATE_0.5.15_AR.md
+          if-no-files-found: error
