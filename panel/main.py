@@ -10,7 +10,7 @@ from datetime import date, datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Query, status
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.concurrency import run_in_threadpool
@@ -132,6 +132,7 @@ def initialize():
             name TEXT NOT NULL,
             url TEXT NOT NULL
         );
+        CREATE INDEX IF NOT EXISTS devices_recent ON devices(last_seen DESC, id);
         CREATE INDEX IF NOT EXISTS devices_mac_lookup ON devices(mac_alias);
         INSERT OR IGNORE INTO subscriptions(device_id) SELECT id FROM devices;
         INSERT OR IGNORE INTO settings VALUES
@@ -251,7 +252,14 @@ class ProofApproval(BaseModel):
 
 @APP.get("/admin/api/proofs")
 def pending_proofs(_: bool = Depends(admin_only)):
-    return {**proofs.status(), "required": os.getenv("DEVICE_PROOF_REQUIRED", "false").lower() == "true"}
+    result = proofs.status()
+    # Proof rows can refer to devices outside the current admin page.
+    with database() as db:
+        for entry in result["pending"] + result["approved"]:
+            row = db.execute("SELECT label,mac_alias FROM devices WHERE id=?", (entry["device"],)).fetchone()
+            if row is not None:
+                entry.update(dict(row))
+    return {**result, "required": os.getenv("DEVICE_PROOF_REQUIRED", "false").lower() == "true"}
 
 
 @APP.post("/admin/api/devices/{device_id}/proof")
@@ -340,24 +348,56 @@ def admin_asset(file_name: str, _: bool = Depends(admin_only)):
     return FileResponse(BASE / "static" / file_name)
 
 
+DEVICE_COLUMNS = """SELECT d.id, mac_alias, key_tail, active, expires_at, label,
+    created_at, last_seen, s.plan, s.trial_started_at
+    FROM devices d LEFT JOIN subscriptions s ON s.device_id=d.id"""
+
+
+def device_status(row):
+    device = dict(row)
+    device["effective_active"] = enabled_device(device)
+    device["status"] = ("pending" if not device["active"] and device["plan"] == "pending"
+                        else "disabled" if not device["active"]
+                        else "expired" if not device["effective_active"]
+                        else "trial" if device["plan"] == "trial" else "active")
+    return device
+
+
 @APP.get("/admin/api/state")
-def admin_state(_: bool = Depends(admin_only)):
+def admin_state(page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=100),
+                search: str = Query("", max_length=100), _: bool = Depends(admin_only)):
+    # instr treats %, _ and quotes literally; never interpolate a search into SQL.
+    needle = search.strip().lower()
+    where = " WHERE instr(lower(d.id || ' ' || mac_alias || ' ' || label), ?) > 0" if needle else ""
+    args = (needle,) if needle else ()
     with database() as db:
-        devices = [dict(row) for row in db.execute("""
-            SELECT d.id, mac_alias, key_tail, active, expires_at, label, created_at, last_seen, s.plan, s.trial_started_at
-            FROM devices d LEFT JOIN subscriptions s ON s.device_id=d.id ORDER BY last_seen DESC
-        """).fetchall()]
+        total = db.execute("SELECT count(*) FROM devices d" + where, args).fetchone()[0]
+        pages = max(1, (total + page_size - 1) // page_size)
+        page = min(page, pages)
+        devices = [device_status(row) for row in db.execute(DEVICE_COLUMNS + where +
+            " ORDER BY last_seen DESC, d.id LIMIT ? OFFSET ?", (*args, page_size, (page - 1) * page_size))]
+        latest = [device_status(row) for row in db.execute(DEVICE_COLUMNS +
+            " ORDER BY last_seen DESC, d.id LIMIT 6")]
+        counts = db.execute("""SELECT count(*), coalesce(sum(active != 0 AND
+            (expires_at IS NULL OR expires_at >= ?)),0) FROM devices""",
+            (datetime.now(timezone.utc).date().isoformat(),)).fetchone()
         playlists = [dict(row) for row in db.execute(
-            "SELECT id,name,url,is_global,created_at FROM playlists ORDER BY id DESC").fetchall()]
-        assignments = [dict(row) for row in db.execute("SELECT device_id,playlist_id FROM device_playlists")]
+            "SELECT id,name,url,is_global,created_at FROM playlists ORDER BY id DESC")]
         settings = dict(db.execute("SELECT * FROM settings WHERE id=1").fetchone())
-    for device in devices:
-        device["effective_active"] = enabled_device(device)
-        device["status"] = ("pending" if not device["active"] and device["plan"] == "pending"
-                            else "disabled" if not device["active"]
-                            else "expired" if not device["effective_active"]
-                            else "trial" if device["plan"] == "trial" else "active")
-    return {"devices": devices, "playlists": playlists, "assignments": assignments, "settings": settings}
+    return {"devices": devices, "latest_devices": latest, "playlists": playlists,
+            "settings": settings, "stats": {"devices": counts[0], "active": counts[1]},
+            "pagination": {"page": page, "page_size": page_size, "pages": pages, "total": total}}
+
+
+@APP.get("/admin/api/devices/{device_id}")
+def device_details(device_id: str, _: bool = Depends(admin_only)):
+    with database() as db:
+        row = db.execute(DEVICE_COLUMNS + " WHERE d.id=?", (device_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "Device not found")
+        assigned = [r[0] for r in db.execute(
+            "SELECT playlist_id FROM device_playlists WHERE device_id=?", (device_id,))]
+    return {"device": device_status(row), "playlist_ids": assigned}
 
 
 @APP.put("/admin/api/devices/{device_id}")
@@ -514,6 +554,7 @@ def health():
     return {"status": "ok"}
 
 app = APP
+
 
 
 

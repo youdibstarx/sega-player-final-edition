@@ -3,8 +3,29 @@ package com.segaiptv.player
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.StringReader
+import java.io.Reader
 
 class ProviderOrderTest {
+    @Test fun stopsReadingAfterAllRequestedGroupsWithoutChangingTheirOrder() {
+        val prefix = "#EXTM3U\n#EXTINF:-1 group-title=Z,A\n#EXTINF:-1 group-title=Other,B\n#EXTINF:-1 group-title=A,C\n"
+        val reader = object : Reader() {
+            var supplied = false
+            override fun read(buffer: CharArray, offset: Int, length: Int): Int {
+                check(!supplied) { "Should not read the remaining large catalogue" }
+                supplied = true
+                prefix.toCharArray().copyInto(buffer, offset)
+                return prefix.length
+            }
+            override fun close() {}
+        }
+        val ranks = ProviderOrder.parse(reader, setOf("Z", "A"))
+        assertEquals(listOf("Z", "Other", "A"), ranks.keys.toList())
+    }
+    @Test fun missingGroupRequiresEndOfFileAndRetainsKnownOrder() {
+        val ranks = ProviderOrder.parse(StringReader("#EXTM3U\n#EXTINF:-1 group-title=Z,A\n#EXTINF:-1 group-title=A,B"), setOf("Z", "Missing"))
+        assertEquals(listOf("Z", "A"), ranks.keys.toList())
+        assertFalse(ranks.containsKey("Missing"))
+    }
     private val playlist = Playlist(1, "Test", "https://provider.test/get.php?username=a&password=b")
     @Test fun firstM3uOccurrenceWinsWithoutAlphabeticalOrIdSorting() {
         val ranks = ProviderOrder.parse(StringReader("""#EXTM3U
@@ -36,3 +57,4 @@ http://provider.test/movie/4.mp4
         }
     }
 }
+

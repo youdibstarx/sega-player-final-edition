@@ -15,6 +15,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 @Composable
 internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page: String,
@@ -23,7 +26,10 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
     onToggleFavorite: (Channel) -> Unit, onLoaded: (List<Channel>) -> Unit, onChoose: () -> Unit,
     loadCategories: suspend (Playlist, String) -> List<ProviderCategory> = { p, k ->
         val categories = CategoryCatalogue.categories(p, k)
-        try { ProviderOrder.arrange(categories, ProviderOrder.load(p, refreshToken)) }
+        try {
+            val ranks = ProviderOrder.load(p, refreshToken, categories.map { it.name }.toSet())
+            ProviderOrder.arrange(categories, ranks).map { it.copy(sourceOrderKnown = it.name in ranks) }
+        }
         catch (ex: Exception) {
             if (ex is CancellationException) throw ex
             categories.map { it.copy(sourceOrderKnown = false) }
@@ -58,9 +64,18 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
         if (retryCategories == 0 && snapshot.categories != null) return@LaunchedEffect
         loadingCategories = true; categoryError = false
         val result = mutableListOf<ProviderCategory>()
-        for (playlist in providers) {
-            try { result += loadCategories(playlist, kind) }
-            catch (ex: Exception) { if (ex is CancellationException) throw ex; categoryError = true }
+        // Bound parallel requests while merging in configured playlist order, never completion order.
+        for (batch in providers.chunked(4)) {
+            val loaded = coroutineScope {
+                batch.map { playlist -> async {
+                    try { loadCategories(playlist, kind) }
+                    catch (ex: Exception) { if (ex is CancellationException) throw ex; null }
+                } }.awaitAll()
+            }
+            for (rows in loaded) {
+                if (rows == null) categoryError = true else result += rows
+            }
+            categories = result.toList()
         }
         categories = result
         if (!categoryError) snapshot.categories = result
@@ -142,3 +157,4 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
         }
     }
 }
+
