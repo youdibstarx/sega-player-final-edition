@@ -12,11 +12,12 @@ import kotlinx.coroutines.withContext
 
 /** Only group names are retained. Never constructs a full channel/VOD catalogue. */
 internal object ProviderOrder {
-    private val lock = Mutex()
+    // Independent providers need not wait behind another provider's download.
+    private val locks = Array(8) { Mutex() }
     private val cached = linkedMapOf<String, Pair<Int, Map<String, Int>>>()
     private val attribute = Regex("""(?:^|\s)(group-title|group)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s,]+))""", RegexOption.IGNORE_CASE)
 
-    fun parse(reader: Reader, check: () -> Unit = {}): Map<String, Int> {
+    fun parse(reader: Reader, requiredNames: Set<String> = emptySet(), check: () -> Unit = {}): Map<String, Int> {
         val result = linkedMapOf<String, Int>()
         val buffer = CharArray(8192)
         val line = StringBuilder()
@@ -45,7 +46,12 @@ internal object ProviderOrder {
             total += n
             require(total <= 128L * 1024 * 1024) { "Provider order too large" }
             for (i in 0 until n) {
-                if (buffer[i] == '\n') accept()
+                if (buffer[i] == '\n') {
+                    accept()
+                    // Once every requested group has appeared, later entries cannot change
+                    // their first-occurrence order. Do not download the remaining catalogue.
+                    if (header && requiredNames.isNotEmpty() && result.keys.containsAll(requiredNames)) return result
+                }
                 else { require(line.length < 65536) { "Provider order line too long" }; line.append(buffer[i]) }
             }
         }
@@ -57,9 +63,12 @@ internal object ProviderOrder {
     fun arrange(categories: List<ProviderCategory>, ranks: Map<String, Int>): List<ProviderCategory> =
         categories.sortedBy { ranks[it.name] ?: Int.MAX_VALUE }
 
-    suspend fun load(playlist: Playlist, refreshToken: Int): Map<String, Int> = withContext(Dispatchers.IO) {
-        lock.withLock {
-            cached[playlist.url]?.takeIf { it.first == refreshToken }?.let { return@withLock it.second }
+    suspend fun load(playlist: Playlist, refreshToken: Int, requiredNames: Set<String>): Map<String, Int> = withContext(Dispatchers.IO) {
+        if (requiredNames.isEmpty()) return@withContext emptyMap()
+        locks[(playlist.url.hashCode() and Int.MAX_VALUE) % locks.size].withLock {
+            synchronized(cached) { cached[playlist.url] }
+                ?.takeIf { it.first == refreshToken && it.second.keys.containsAll(requiredNames) }
+                ?.let { return@withLock it.second }
             val context = currentCoroutineContext()
             val started = System.nanoTime()
             val con = URL(PlaylistSource.normalize(playlist.url)).openConnection() as HttpURLConnection
@@ -69,15 +78,18 @@ internal object ProviderOrder {
             try {
                 check(con.responseCode in 200..299) { "Provider order unavailable" }
                 val ranks = con.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
-                    parse(reader) {
+                    parse(reader, requiredNames) {
                         context.ensureActive()
                         check(System.nanoTime() - started < 90_000_000_000L) { "Provider order timed out" }
                     }
                 }
-                if (cached.size >= 30) cached.remove(cached.keys.first())
-                cached[playlist.url] = refreshToken to ranks
+                synchronized(cached) {
+                    if (cached.size >= 30 && playlist.url !in cached) cached.remove(cached.keys.first())
+                    cached[playlist.url] = refreshToken to ranks
+                }
                 ranks
             } finally { con.disconnect() }
         }
     }
 }
+
