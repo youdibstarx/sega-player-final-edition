@@ -16,6 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.concurrency import run_in_threadpool
 from security import RateLimiter
 from proof import DeviceProofs
+from resellers import initialize_resellers, install_reseller_endpoints, make_hash, valid_hash
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field, field_validator
 
@@ -40,6 +41,15 @@ async def invalid_input(request, exc):
 async def security_headers(request: Request, call_next):
     try:
         path = request.url.path
+        if path.startswith("/reseller/api/"):
+            client = request.client.host if request.client else "unknown"
+            await run_in_threadpool(limiter.check, "reseller-ip", client, 120)
+            if request.method not in {"GET", "HEAD", "OPTIONS"}:
+                if request.headers.get("X-Reseller-Request") != "1":
+                    raise HTTPException(403, "Reseller request header required")
+                origin = request.headers.get("Origin")
+                if origin and origin != str(request.base_url).rstrip("/"):
+                    raise HTTPException(403, "Cross-origin request rejected")
         if path.startswith("/portal/api/"):
             client = request.client.host if request.client else "unknown"
             await run_in_threadpool(limiter.check, "portal-ip", client, 60)
@@ -136,6 +146,12 @@ def initialize():
         INSERT OR IGNORE INTO settings VALUES
             (1, 'SEGA IPTV Player', '#E5474C', '', '');
         """)
+        columns = {r["name"] for r in db.execute("PRAGMA table_info(personal_playlists)")}
+        if "pin_salt" not in columns:
+            db.execute("ALTER TABLE personal_playlists ADD COLUMN pin_salt TEXT")
+        if "pin_hash" not in columns:
+            db.execute("ALTER TABLE personal_playlists ADD COLUMN pin_hash TEXT")
+    initialize_resellers(database)
 
 
 initialize()
@@ -321,7 +337,7 @@ def admin_page(_: bool = Depends(admin_only)):
 
 @APP.get("/admin/assets/{file_name}")
 def admin_asset(file_name: str, _: bool = Depends(admin_only)):
-    if file_name not in {"app.css", "app.js"}:
+    if file_name not in {"app.css", "app.js", "reseller-admin.js"}:
         raise HTTPException(404)
     return FileResponse(BASE / "static" / file_name)
 
@@ -440,9 +456,14 @@ def portal_device(request: Request):
 
 
 class PersonalPlaylistInput(PlaylistInput):
-    # Public clients cannot choose assignment, device ID, activation or global scope.
+    # Device credentials grant view access. PIN is required for creating or modifying a playlist.
     model_config = {"extra": "forbid"}
     is_global: Literal[False] = False
+    pin: str = Field(pattern=r"^[0-9]{4,8}$")
+
+
+class PlaylistPin(BaseModel):
+    pin: str = Field(pattern=r"^[0-9]{4,8}$")
 
 
 @APP.get("/")
@@ -461,7 +482,7 @@ def portal_asset(file_name: str):
 @APP.get("/portal/api/account")
 def portal_account(device=Depends(portal_device)):
     with database() as db:
-        playlist = db.execute("SELECT name,url FROM personal_playlists WHERE device_id=?", (device["id"],)).fetchone()
+        playlist = db.execute("SELECT name,url,(pin_hash IS NOT NULL) AS pin_set FROM personal_playlists WHERE device_id=?", (device["id"],)).fetchone()
         subscription = db.execute("SELECT plan FROM subscriptions WHERE device_id=?", (device["id"],)).fetchone()
     return {"active": enabled_device(device), "expires_at": device["expires_at"],
             "plan": subscription["plan"] if subscription else "existing",
@@ -471,22 +492,57 @@ def portal_account(device=Depends(portal_device)):
 @APP.put("/portal/api/playlist")
 def portal_save(payload: PersonalPlaylistInput, device=Depends(portal_device)):
     with database() as db:
-        db.execute("""INSERT INTO personal_playlists(device_id,name,url) VALUES(?,?,?)
-            ON CONFLICT(device_id) DO UPDATE SET name=excluded.name,url=excluded.url""",
-            (device["id"], payload.name.strip(), payload.url.strip()))
+        db.execute("BEGIN IMMEDIATE")
+        existing = db.execute("SELECT pin_salt,pin_hash FROM personal_playlists WHERE device_id=?",
+                              (device["id"],)).fetchone()
+        if existing and existing["pin_hash"] and not valid_hash(
+            payload.pin, existing["pin_salt"], existing["pin_hash"]
+        ):
+            raise HTTPException(403, "Invalid playlist PIN")
+        # A legacy playlist without a PIN gains one on its first authorized edit.
+        if existing and existing["pin_hash"]:
+            salt, digest = existing["pin_salt"], existing["pin_hash"]
+        else:
+            salt, digest = make_hash(payload.pin)
+        db.execute("""INSERT INTO personal_playlists(device_id,name,url,pin_salt,pin_hash)
+            VALUES(?,?,?,?,?) ON CONFLICT(device_id) DO UPDATE SET
+            name=excluded.name,url=excluded.url,pin_salt=excluded.pin_salt,
+            pin_hash=excluded.pin_hash""",
+            (device["id"], payload.name.strip(), payload.url.strip(), salt, digest))
     return {"saved": True}
 
 
 @APP.delete("/portal/api/playlist")
-def portal_delete(device=Depends(portal_device)):
+def portal_delete(payload: PlaylistPin, device=Depends(portal_device)):
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        existing = db.execute("SELECT pin_salt,pin_hash FROM personal_playlists WHERE device_id=?",
+                              (device["id"],)).fetchone()
+        if not existing:
+            raise HTTPException(404, "Playlist not found")
+        if not existing["pin_hash"]:
+            raise HTTPException(409, "Set a PIN by editing the legacy playlist first")
+        if not valid_hash(payload.pin, existing["pin_salt"], existing["pin_hash"]):
+            raise HTTPException(403, "Invalid playlist PIN")
         db.execute("DELETE FROM personal_playlists WHERE device_id=?", (device["id"],))
     return {"deleted": True}
+
+
+@APP.get("/api/v1/time")
+def server_time():
+    # Public HTTPS-only clock bootstrap for older Android builds and signed device requests.
+    # Epoch seconds are authoritative; ISO UTC is included for human diagnostics.
+    utc = datetime.now(timezone.utc).replace(microsecond=0)
+    unix = int(utc.timestamp())
+    return {"unix": unix, "timestamp": unix, "server_time": unix,
+            "server_time_ms": unix * 1000, "utc": utc.isoformat()}
 
 
 @APP.get("/health")
 def health():
     return {"status": "ok"}
+
+install_reseller_endpoints(APP, database, limiter, admin_only, now_iso, add_months)
 
 app = APP
 

@@ -29,7 +29,8 @@ internal object DeviceProof {
     }.getOrDefault("—")
 
     @Synchronized
-    fun headers(id: String, method: String, path: String, body: String?): Map<String, String> {
+    fun headers(id: String, method: String, path: String, body: String?,
+        unixSeconds: Long = System.currentTimeMillis() / 1000): Map<String, String> {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         if (!ks.containsAlias(ALIAS)) {
             KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore").apply {
@@ -38,7 +39,7 @@ internal object DeviceProof {
                     .setDigests(KeyProperties.DIGEST_SHA256).build())
             }.generateKeyPair()
         }
-        val time = (System.currentTimeMillis() / 1000).toString()
+        val time = unixSeconds.toString()
         val nonce = UUID.randomUUID().toString()
         val key = ks.getKey(ALIAS, null) as PrivateKey
         return mapOf("X-Proof-Time" to time, "X-Proof-Nonce" to nonce,
