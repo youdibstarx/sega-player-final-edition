@@ -142,7 +142,8 @@ private fun TvLanding(config: AppConfig, identity: DeviceIdentity, channelCount:
         }
         Spacer(Modifier.height(18.dp))
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            val cardHeight = minOf(maxHeight * .84f, ((maxWidth - 50.dp) / 6f) * (464f / 400f))
+            // Slightly taller artwork makes the six navigation cards feel balanced on TV screens.
+            val cardHeight = minOf(maxHeight * .90f, ((maxWidth - 50.dp) / 6f) * 1.25f)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 val tiles = listOf(
@@ -164,10 +165,15 @@ private fun TvLanding(config: AppConfig, identity: DeviceIdentity, channelCount:
                 }
             }
         }
-        SubscriptionStrip(config)
-        WatchHistory(onPlay, channels)
-        Spacer(Modifier.height(10.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(tr(R.string.app_activation_expiry), color = Color.LightGray, fontSize = 12.sp)
+            Text(config.expires.substringBefore('T').substringBefore(' ').ifBlank { tr(R.string.unspecified) },
+                color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically) {
+            WatchHistory(onPlay, channels)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TvAction("↻ " + tr(R.string.refresh), onClick = onRefresh)
                 TvAction("⏻ " + tr(R.string.exit_app), onClick = onExit)
