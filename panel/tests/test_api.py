@@ -71,6 +71,17 @@ class PanelApiTests(unittest.TestCase):
         self.assertFalse(revoked["active"])
         self.assertEqual(revoked["playlists"], [])
 
+    def test_time_is_shared_with_android_0515_and_newer(self):
+        import time
+        response = self.client.get("/api/v1/time")
+        self.assertEqual(response.status_code, 200)
+        info = response.json()
+        self.assertLess(abs(info["unix_seconds"] - time.time()), 5)
+        self.assertEqual(info["unix_seconds"], info["unix"])
+        self.assertEqual(info["unix_seconds"], info["timestamp"])
+        self.assertEqual(info["server_time_ms"], info["unix_seconds"] * 1000)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+
     def test_invalid_links(self):
         res = self.client.post("/admin/api/playlists", headers=self.headers,
             json={"name": "Bad", "url": "file:///secret.m3u", "is_global": True})

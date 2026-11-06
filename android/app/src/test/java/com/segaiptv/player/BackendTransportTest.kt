@@ -69,6 +69,17 @@ class BackendTransportTest {
         assertEquals("Backend TLS verification failed", tls.message)
         assertNull(tls.cause)
     }
+    @Test fun clockEndpointMissingIsARecoverableHttpErrorWithNoSensitiveBody() {
+        val con = Fake(404, "sensitive credentials and URLs")
+        val error = assertThrows(BackendHttpError::class.java) {
+            BackendTransport.request("https://panel.test", "/api/v1/time", "GET") { con }
+        }
+        assertEquals(404, error.statusCode)
+        assertEquals("Backend HTTP 404", error.message)
+        assertNull(error.cause)
+        assertFalse(con.errorRead)
+        assertTrue(con.closed)
+    }
     @Test fun oversizedResponsesAreStopped() {
         val input = ByteArrayInputStream(ByteArray(BackendTransport.MAX_RESPONSE_BYTES + 1))
         assertThrows(IllegalStateException::class.java) { BackendTransport.readBounded(input) }

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SEGA PLAYER | تفعيلات الموزعين</title>
+<link rel="stylesheet" href="/reseller/assets/reseller.css">
+<script src="/reseller/assets/reseller.js" defer></script></head>
+<body><main>
+<header><a href="/portal">SEGA PLAYER</a><span>RESELLER CONTROL</span><h1>بوابة التفعيلات والموزعين</h1>
+<p>التسجيل بالإيميل وكلمة السر. تُخصم النقاط فقط بعد نجاح التفعيل.</p></header>
+<p id="message" role="status" aria-live="polite"></p>
+<form id="login" class="panel">
+<h2>تسجيل دخول الموزع</h2>
+<label>البريد الإلكتروني<input name="email" type="email" autocomplete="username" required maxlength="254" dir="ltr"></label>
+<label>كلمة السر<input name="password" type="password" autocomplete="current-password" required></label>
+<button>دخول</button></form>
+<div id="account" hidden>
+<section class="summary panel"><div><small id="role"></small><h2 id="user"></h2><p>الرصيد المتوفر</p><strong id="balance">0</strong> نقطة</div><button id="logout" class="secondary">خروج</button></section>
+<div class="twocol">
+<section class="panel">
+<h2>فحص MAC</h2><form id="check"><label>MAC Address<input name="mac" dir="ltr" autocomplete="off" maxlength="17" placeholder="AA:BB:CC:DD:EE:FF" required></label><button>فحص الجهاز</button></form>
+<p id="mac-result" role="status"></p>
+</section>
+<section class="panel">
+<h2>تفعيل جهاز</h2>
+<form id="activate"><label>MAC Address<input name="mac" dir="ltr" maxlength="17" autocomplete="off" placeholder="AA:BB:CC:DD:EE:FF" required></label>
+<label>مدة الاشتراك<select name="plan"><option value="six_months">6 أشهر — 0.5 نقطة</option><option value="year">سنة — 1 نقطة</option><option value="lifetime">مدى الحياة — 2 نقطتان</option></select></label>
+<button>تأكيد التفعيل وخصم الرصيد</button></form>
+</section>
+</div>
+<section id="sub-section" class="panel" hidden><h2>إدارة الموزعين الفرعيين</h2><p class="muted">يمكنك إنشاء موزعين فرعيين بمستوى واحد فقط وشحنهم من رصيدك.</p>
+<div class="twocol"><form id="create-sub"><h3>إضافة موزع فرعي</h3><label>إيميل الموزع<input name="email" type="email" dir="ltr" autocomplete="off" required></label>
+<label>كلمة السر الجديدة (12 حرفاً على الأقل)<input name="password" type="password" minlength="12" maxlength="128" required autocomplete="new-password"></label><button>إنشاء الحساب</button></form>
+<form id="transfer"><h3>تحويل الرصيد</h3><label>إيميل الموزع الفرعي<input name="email" type="email" dir="ltr" required></label>
+<label>النقاط (مضاعفات 0.5)<input name="points" type="number" min="0.5" step="0.5" required></label><button>تحويل النقاط</button></form></div>
+<div class="table-wrap"><table><thead><tr><th>الموزع الفرعي</th><th>الرصيد</th></tr></thead><tbody id="children"></tbody></table></div>
+</section>
+<section class="panel"><h2>سجل التفعيلات</h2><div class="table-wrap"><table><thead><tr><th>MAC</th><th>المدة</th><th>النقاط</th><th>الانتهاء</th><th>التاريخ</th></tr></thead><tbody id="activations"></tbody></table></div></section>
+<section class="panel"><h2>سجل الرصيد والتحويلات</h2><div class="table-wrap"><table><thead><tr><th>العملية</th><th>من</th><th>إلى</th><th>النقاط</th><th>التاريخ</th></tr></thead><tbody id="transfers"></tbody></table></div></section>
+</div><footer>استعمل هذه البوابة فقط لتفعيل الأجهزة ومصادر البث المصرح بها.</footer>
+</main></body></html>
