@@ -218,7 +218,11 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
             hasLoadedOnce = true
             loading = false
             channelsLoading = false
-            message = "تعذر الاتصال بالخادم. حاول التحديث من جديد."
+            message = when (ex) {
+                is BackendHttpError -> "تعذر الاتصال بالخادم. حاول التحديث من جديد. (HTTP ${ex.statusCode})"
+                is BackendAccessDenied -> "تعذر الاتصال بالخادم. حاول التحديث من جديد. (401/403)"
+                else -> "تعذر الاتصال بالخادم. حاول التحديث من جديد."
+            }
         }
     }
 
