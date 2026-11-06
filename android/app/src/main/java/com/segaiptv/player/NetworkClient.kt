@@ -48,7 +48,9 @@ internal object NetworkClient {
         app.getSharedPreferences("network", Context.MODE_PRIVATE).edit().putString("dns", selected.name).apply()
         resetConnections()
     }
-    fun resetConnections() { client.dispatcher.cancelAll(); client.connectionPool.evictAll() }
+    // Do not cancel active requests when a DNS mode changes; that can interrupt activation and catalogue loads.
+    // Evict pooled idle connections so new requests resolve through the selected DNS.
+    fun resetConnections() { client.connectionPool.evictAll() }
     fun vpnActive(): Boolean {
         val cm = context?.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
         return cm.getNetworkCapabilities(cm.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true

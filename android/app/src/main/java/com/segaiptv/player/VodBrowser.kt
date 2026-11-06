@@ -183,6 +183,7 @@ fun PlaylistScreen(config: AppConfig, loading: Boolean, warnings: String, onRefr
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             TvAction(tr(R.string.refresh_playlists), onClick = onRefresh)
             TvAction(tr(R.string.open_m3u), onClick = onLocalFile)
+            ConnectionSettings()
         }
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 12.dp), color = v3Gold)
         if (warnings.isNotBlank()) Text(statusText(warnings), color = v3Gold)
