@@ -2,7 +2,8 @@ name: Build SEGA PLAYER V3 Secure APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    # Temporarily build an installable QA APK for the synchronized panel/app PR.
+    branches: [main, feature/reseller-activations-playlist-pin]
     paths:
       - 'android/**'
       - '.github/workflows/build-apk.yml'
