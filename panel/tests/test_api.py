@@ -70,6 +70,21 @@ class PanelApiTests(unittest.TestCase):
         self.assertFalse(revoked["active"])
         self.assertEqual(revoked["playlists"], [])
 
+    def test_clock_bootstrap_matches_android_contract(self):
+        from datetime import datetime, timezone
+        import time
+        before = int(time.time())
+        res = self.client.get("/api/v1/time")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        after = int(time.time())
+        self.assertTrue(before <= data["unix"] <= after)
+        self.assertEqual(data["timestamp"], data["unix"])
+        self.assertEqual(data["server_time"], data["unix"])
+        self.assertEqual(data["server_time_ms"], data["unix"] * 1000)
+        self.assertEqual(datetime.fromisoformat(data["utc"]).tzinfo, timezone.utc)
+        self.assertEqual(res.headers["cache-control"], "no-store")
+
     def test_invalid_links(self):
         res = self.client.post("/admin/api/playlists", headers=self.headers,
             json={"name": "Bad", "url": "file:///secret.m3u", "is_global": True})
