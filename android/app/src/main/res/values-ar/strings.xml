@@ -152,6 +152,7 @@
     <string name="subscription_expired">منتهي الصلاحية</string>
     <string name="subscription_unlimited">غير محدود</string>
     <string name="subscription_days">متبقي %1$d يوم</string>
+    <string name="connection_and_updates">الاتصال والتحديثات</string>
 </resources>
 
 

@@ -402,11 +402,9 @@ private fun TvSettings(config: AppConfig, identity: DeviceIdentity, count: Int,
                 ChannelOrderPicker(openChannels, Modifier.weight(1.25f))
                 ViewerSettings(channels, warnings, error, loading, Modifier.weight(1f))
             }
-            SettingsGroup(tr(R.string.connection_settings)) {
-                ConnectionSettings(Modifier.fillMaxWidth())
-            }
-            SettingsGroup(tr(R.string.update_group)) {
-                TvAction(tr(R.string.update_check), Modifier.fillMaxWidth(), onClick = checkUpdates)
+            SettingsGroup(tr(R.string.connection_and_updates)) {
+                ConnectionSettings(Modifier.weight(1f))
+                TvAction(tr(R.string.update_check), Modifier.weight(1.4f), onClick = checkUpdates)
             }
         }
     }

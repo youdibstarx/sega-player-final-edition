@@ -152,6 +152,7 @@
     <string name="subscription_expired">Expired</string>
     <string name="subscription_unlimited">Unlimited</string>
     <string name="subscription_days">%1$d days left</string>
+    <string name="connection_and_updates">Connection and updates</string>
 </resources>
 
 

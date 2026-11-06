@@ -152,6 +152,7 @@
     <string name="subscription_expired">Caducado</string>
     <string name="subscription_unlimited">Ilimitado</string>
     <string name="subscription_days">Quedan %1$d días</string>
+    <string name="connection_and_updates">Conexión y actualizaciones</string>
 </resources>
 
 
