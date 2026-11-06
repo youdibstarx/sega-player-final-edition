@@ -1,9 +1,14 @@
 package com.segaiptv.player
 
+import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,7 +24,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -213,7 +221,7 @@ fun PlaylistScreen(config: AppConfig, identity: DeviceIdentity, loading: Boolean
 @Composable
 private fun DeviceActivationCard(identity: DeviceIdentity, onCopyMac: () -> Unit,
     onCopyKey: () -> Unit, modifier: Modifier = Modifier) {
-    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
     val qr = remember(identity.virtualMac, identity.key) {
         val matrix = deviceQrMatrix(identity.virtualMac, identity.key)
         val pixels = IntArray(matrix.width * matrix.height) { index ->
@@ -230,7 +238,7 @@ private fun DeviceActivationCard(identity: DeviceIdentity, onCopyMac: () -> Unit
         DeviceIdentityLine(tr(R.string.virtual_mac), identity.virtualMac, "⌘", onCopyMac)
         DeviceIdentityLine(tr(R.string.device_key), identity.key, "▣", onCopyKey)
         Text("↗  faster4k.xyz", color = v3Gold, fontSize = 13.sp,
-            modifier = Modifier.clickable { uriHandler.openUri("https://faster4k.xyz") }
+            modifier = Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://faster4k.xyz"))) }
                 .padding(vertical = 4.dp))
     }
 }
