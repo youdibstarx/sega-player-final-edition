@@ -104,7 +104,8 @@ fun TvShell(
                 favorites, accent, query, refreshToken, onPlay, onToggleFavorite, onCategoryLoaded, onChoose = { query = "" }, memory = categoryMemory, m3uOnly = true)
             "favorites" -> LiveTvV3(Modifier.weight(1f), channels.filter { it.url in favorites }, loading,
                 favorites, catalogueWarnings(warnings), onPlay, onToggleFavorite, includeVod = true, search = query)
-            "playlists" -> PlaylistScreen(config, loading, warnings, onRefresh, onLocalFile, Modifier.weight(1f))
+            "playlists" -> PlaylistScreen(config, identity, loading, warnings, onRefresh, onLocalFile,
+                onCopyMac, onCopyKey, Modifier.weight(1f))
             else -> TvSettings(config, identity, channels.size, accent, error,
                 onCopyMac, onCopyKey, Modifier.weight(1f), channels, warnings, loading, updates, { onPageChange("channels") })
         }

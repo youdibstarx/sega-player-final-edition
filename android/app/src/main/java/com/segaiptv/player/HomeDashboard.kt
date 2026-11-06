@@ -146,7 +146,11 @@ internal fun SubscriptionCard(playlist: Playlist, modifier: Modifier = Modifier,
     }
     Row(modifier.background(appTheme.surface, RoundedCornerShape(12.dp)).padding(if (compact) 8.dp else 16.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("✦", color = appTheme.accent, fontSize = if (compact) 22.sp else 32.sp)
+        Box(Modifier.size(if (compact) 34.dp else 46.dp)
+            .background(appTheme.accent.copy(alpha = .18f), RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center) {
+            Text("▤", color = appTheme.accent, fontSize = if (compact) 20.sp else 26.sp)
+        }
         Column(Modifier.weight(1f)) {
             Text(playlist.name, fontSize = if (compact) 12.sp else 18.sp, fontWeight = FontWeight.Bold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
