@@ -230,29 +230,29 @@ private fun DeviceActivationCard(identity: DeviceIdentity, onCopyMac: () -> Unit
         }
         Bitmap.createBitmap(pixels, matrix.width, matrix.height, Bitmap.Config.ARGB_8888).asImageBitmap()
     }
-    Column(modifier.background(v3Panel, RoundedCornerShape(16.dp)).padding(14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("⌁  SEGA PLAYER", color = v3Gold, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-        Image(qr, tr(R.string.qr_description), Modifier.size(128.dp), filterQuality = FilterQuality.None)
-        Text(tr(R.string.scan_qr), color = Color.LightGray, fontSize = 10.sp)
+    Column(modifier.background(v3Panel, RoundedCornerShape(16.dp)).padding(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Text("⌁  SEGA PLAYER", color = v3Gold, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Image(qr, tr(R.string.qr_description), Modifier.size(96.dp), filterQuality = FilterQuality.None)
+        Text(tr(R.string.scan_qr), color = Color.LightGray, fontSize = 9.sp)
         DeviceIdentityLine(tr(R.string.virtual_mac), identity.virtualMac, "⌘", onCopyMac)
         DeviceIdentityLine(tr(R.string.device_key), identity.key, "▣", onCopyKey)
-        Text("↗  faster4k.xyz", color = v3Gold, fontSize = 13.sp,
+        Text("↗  faster4k.xyz", color = v3Gold, fontSize = 12.sp,
             modifier = Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://faster4k.xyz"))) }
-                .padding(vertical = 4.dp))
+                .padding(vertical = 2.dp))
     }
 }
 
 @Composable
 private fun DeviceIdentityLine(label: String, value: String, icon: String, onCopy: () -> Unit) {
     Row(Modifier.fillMaxWidth().background(Color.White.copy(alpha = .05f), RoundedCornerShape(10.dp))
-        .clickable(onClick = onCopy).padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(icon, color = v3Gold, fontSize = 17.sp)
+        .clickable(onClick = onCopy).padding(horizontal = 8.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Text(icon, color = v3Gold, fontSize = 15.sp)
         Column(Modifier.weight(1f)) {
-            Text(label, color = Color.LightGray, fontSize = 9.sp)
-            Text(value, color = Color.White, fontSize = 11.sp, maxLines = 1)
+            Text(label, color = Color.LightGray, fontSize = 8.sp)
+            Text(value, color = Color.White, fontSize = 10.sp, maxLines = 1)
         }
-        Text("⧉", color = Color.LightGray, fontSize = 14.sp)
+        Text("⧉", color = Color.LightGray, fontSize = 12.sp)
     }
 }

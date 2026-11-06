@@ -155,9 +155,7 @@ private fun TvLanding(config: AppConfig, identity: DeviceIdentity, channelCount:
                     Triple(R.drawable.tile_settings, tr(R.string.settings), "settings")
                 )
                 tiles.forEachIndexed { index, tile ->
-                    if (tile.third == "playlists") SubscriptionTile(config, Modifier.weight(1f).height(cardHeight)) {
-                        onPageChange("playlists")
-                    } else ThemeArtworkTile(tile.first, tile.second, accent,
+                    ThemeArtworkTile(tile.first, tile.second, accent,
                         Modifier.weight(1f).height(cardHeight)
                             .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)) {
                         onPageChange(tile.third)
