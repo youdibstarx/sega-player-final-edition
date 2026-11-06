@@ -528,6 +528,16 @@ def portal_delete(payload: PlaylistPin, device=Depends(portal_device)):
     return {"deleted": True}
 
 
+@APP.get("/api/v1/time")
+def server_time():
+    # Public HTTPS-only clock bootstrap for older Android builds and signed device requests.
+    # Epoch seconds are authoritative; ISO UTC is included for human diagnostics.
+    utc = datetime.now(timezone.utc).replace(microsecond=0)
+    unix = int(utc.timestamp())
+    return {"unix": unix, "timestamp": unix, "server_time": unix,
+            "server_time_ms": unix * 1000, "utc": utc.isoformat()}
+
+
 @APP.get("/health")
 def health():
     return {"status": "ok"}
