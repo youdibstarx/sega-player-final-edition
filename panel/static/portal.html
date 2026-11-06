@@ -1,1 +1,25 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SEGA PLAYER — قائمتي</title><link rel="stylesheet" href="/portal/assets/portal.css"><script defer src="/portal/assets/portal.js"></script></head><body><main><header><span>SEGA PLAYER V3</span><h1>قائمة التشغيل الخاصة بي</h1><p>أدخل MAC ومفتاح الجهاز الظاهرين داخل التطبيق لإدارة قائمتك.</p></header><p id="message" role="status" aria-live="polite"></p><form id="login"><label>MAC<input name="mac" dir="ltr" placeholder="AA:BB:CC:DD:EE:FF" maxlength="17" required autocomplete="off"></label><label>Device Key — مفتاح الجهاز<input name="key" type="password" dir="ltr" minlength="6" maxlength="128" required autocomplete="off"></label><button>دخول</button></form><section id="account" hidden><div class="summary"><p id="subscription"></p><button type="button" id="logout" class="secondary">تسجيل الخروج</button></div><form id="playlist"><label>اسم القائمة<input name="name" maxlength="100" required placeholder="قائمتي"></label><label>رابط M3U<input name="url" dir="ltr" type="url" maxlength="3000" required placeholder="https://example.com/playlist.m3u"></label><div class="actions"><button>حفظ القائمة</button><button type="button" id="delete" class="secondary">حذف قائمتي</button></div></form><p class="hint">بعد الحفظ، حدّث القوائم داخل التطبيق. هذه القائمة خاصة بجهازك. انتهاء التفعيل لا يحذف قائمتك؛ تواصل مع المدير لتفعيل سنة أو مدى الحياة.</p></section><footer>شهر تجريبي مجاني للأجهزة الجديدة من أول تسجيل ناجح. أضف فقط مصادر المحتوى التي تملك حق استخدامها.</footer></main></body></html>
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SEGA PLAYER — قائمتي</title>
+<link rel="stylesheet" href="/portal/assets/portal.css">
+<script defer src="/portal/assets/portal.js"></script></head>
+<body><main>
+<header><span>SEGA PLAYER V3</span><h1>قائمة التشغيل الخاصة بي</h1>
+<p>أدخل MAC ومفتاح الجهاز الظاهرين داخل التطبيق لعرض قائمتك وإدارتها.</p></header>
+<p id="message" role="status" aria-live="polite"></p>
+<form id="login"><label>MAC<input name="mac" dir="ltr" placeholder="AA:BB:CC:DD:EE:FF" maxlength="17" required autocomplete="off"></label>
+<label>Device Key — مفتاح الجهاز<input name="key" type="password" dir="ltr" minlength="6" maxlength="128" required autocomplete="off"></label>
+<button>دخول</button></form>
+<section id="account" hidden><div class="summary"><p id="subscription"></p><button type="button" id="logout" class="secondary">تسجيل الخروج</button></div>
+<div class="summary"><h2>قائمتي</h2><p id="playlist-view"></p>
+<div class="actions"><button type="button" id="edit">إضافة / تعديل القائمة</button></div>
+<p class="hint">يمكن فتح القائمة ومشاهدتها في التطبيق من دون PIN. يُطلب PIN فقط لحفظ تعديل أو حذف القائمة من صفحة المشترك.</p></div>
+<form id="playlist" hidden><h2 id="edit-title">تعديل القائمة</h2>
+<label>اسم القائمة<input name="name" maxlength="100" required placeholder="قائمتي"></label>
+<label>رابط M3U<input name="url" dir="ltr" type="url" maxlength="3000" required placeholder="https://example.com/playlist.m3u"></label>
+<label><span id="pin-label">PIN القائمة</span><input name="pin" type="password" inputmode="numeric" dir="ltr" minlength="4" maxlength="8" pattern="[0-9]{4,8}" required autocomplete="off" placeholder="4–8 أرقام"></label>
+<div class="actions"><button>حفظ القائمة</button><button type="button" id="delete" class="secondary">حذف قائمتي</button><button type="button" id="cancel" class="secondary">إلغاء</button></div></form>
+<p class="hint">بعد الحفظ، حدّث القوائم داخل التطبيق. انتهاء التفعيل لا يحذف قائمتك، ويمكنك تعديلها من هنا بعد إدخال PIN الصحيح.</p></section>
+<footer>شهر تجريبي مجاني للأجهزة الجديدة من أول تسجيل ناجح. أضف فقط مصادر المحتوى التي تملك حق استخدامها.</footer>
+</main></body></html>
