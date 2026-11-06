@@ -85,8 +85,17 @@ object Api {
             return BackendTransport.request(BackendAddress.value(), path, method, body, key, proof)
         }
         if (BuildConfig.DEVICE_PROOF) {
-            val serverTime = BackendTransport.request(BackendAddress.value(), "/api/v1/time", "GET")
-            DeviceProof.synchronize(serverTime.getLong("unix_seconds"))
+            // The existing 0.5.15 APK failed before registration when a deployed panel
+            // had not yet added /api/v1/time. Clock bootstrap is optional: do not
+            // disable proof or block device registration on a missing clock endpoint.
+            val unixSeconds = try {
+                val serverTime = BackendTransport.request(BackendAddress.value(), "/api/v1/time", "GET")
+                serverTime.getLong("unix_seconds")
+            } catch (ex: Exception) {
+                if (ex is kotlinx.coroutines.CancellationException) throw ex
+                System.currentTimeMillis() / 1000
+            }
+            DeviceProof.synchronize(unixSeconds)
         }
         signedRequest("/api/v1/register", "POST", payload.toString())
         val response = signedRequest("/api/v1/config?device_id=${identity.id}", "GET", key = identity.key)
