@@ -115,6 +115,15 @@ class ResellerTests(unittest.TestCase):
             self.assertEqual(result.status_code, 200, result.text)
             self.assertEqual(result.json()["points_charged"], expected_cost)
             self.assertFalse(result.json()["already_processed"])
+            # Android reads the same activation record immediately, without a separate
+            # reseller-only state or PIN/password in the playback API response.
+            android = self.c.get("/api/v1/config", params={"device_id": device["device_id"]},
+                                 headers={"X-Device-Key": device["device_key"]})
+            self.assertEqual(android.status_code, 200)
+            self.assertTrue(android.json()["active"])
+            self.assertEqual(android.json()["expires_at"], result.json()["expires_at"])
+            self.assertNotIn("pin_hash", android.text)
+            self.assertNotIn("password_hash", android.text)
             again = self.c.post("/reseller/api/activate", headers=self.main_auth, json=data)
             self.assertEqual(again.status_code, 200)
             self.assertTrue(again.json()["already_processed"])
