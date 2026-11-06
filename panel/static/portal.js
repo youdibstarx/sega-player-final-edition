@@ -28,7 +28,7 @@ function openEdit(){
  $('#pin-label').textContent=p?.pin_set?'PIN القائمة الحالي':'تعيين PIN جديد للقائمة (4–8 أرقام)';
  $('#delete').hidden=!p||!p.pin_set;
 }
-async function busy(form,action){const buttons=[...form.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);try{await action();}catch(e){message(e.message);}finally{buttons.forEach(b=>b.disabled=false;}}
+async function busy(form,action){const buttons=[...form.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);try{await action();}catch(e){message(e.message);}finally{buttons.forEach(b=>b.disabled=false);}}
 $('#login').onsubmit=e=>{e.preventDefault();busy(e.target,async()=>{
  credentials={mac:e.target.elements.mac.value.trim().toUpperCase(),key:e.target.elements.key.value.trim()};
  try{const data=await request('account');showAccount(data);e.target.reset();message('');}
