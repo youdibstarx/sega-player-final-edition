@@ -155,7 +155,7 @@ def install_reseller_endpoints(APP, database, limiter, admin_only, now_iso, add_
             transfers = db.execute("""SELECT id,source_email,target_email,units,action,created_at
                 FROM reseller_transfers ORDER BY id DESC LIMIT 100""").fetchall()
             activations = db.execute("""SELECT request_id,reseller_email,mac_alias,plan,cost_units,
-                expires_at,created_at FROM reseller_activations ORDER BY created_at DESC LIMIT 100""").fetchall()
+                expires_at,created_at FROM reseller_activations ORDER BY rowid DESC LIMIT 100""").fetchall()
         return {"resellers": [{**dict(r), "points": r["balance_units"]/2} for r in rows],
                 "transfers": [{**dict(r), "points": r["units"]/2} for r in transfers],
                 "activations": [{**dict(r), "points": r["cost_units"]/2} for r in activations]}
@@ -200,7 +200,7 @@ def install_reseller_endpoints(APP, database, limiter, admin_only, now_iso, add_
                 (user["email"],user["email"])).fetchall()
             activations = db.execute("""SELECT request_id,mac_alias,plan,cost_units,expires_at,created_at
                 FROM reseller_activations WHERE reseller_email=?
-                ORDER BY created_at DESC LIMIT 60""", (user["email"],)).fetchall()
+                ORDER BY rowid DESC LIMIT 60""", (user["email"],)).fetchall()
         return {"email":user["email"],"role":user["role"],"balance_points":current["balance_units"]/2,
                 "children":[{"email":r["email"],"points":r["balance_units"]/2} for r in children],
                 "transfers":[{**dict(r),"points":r["units"]/2} for r in transactions],
