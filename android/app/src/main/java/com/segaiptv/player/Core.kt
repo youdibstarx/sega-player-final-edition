@@ -75,8 +75,18 @@ object Api {
             put("mac_alias", identity.virtualMac)
             put("device_key", identity.key)
         }
+        // Older deployed panels may not have /time. Never block registration on that
+        // optional preflight: normal device registration remains the source of truth.
+        val clockOffsetSeconds = runCatching {
+            val sampledAt = System.currentTimeMillis() / 1000
+            val reply = BackendTransport.request(BackendAddress.value(), "/api/v1/time", "GET")
+            val serverUnix = reply.optLong("unix", 0L)
+            require(serverUnix in 1_600_000_000L..4_102_444_800L) { "Invalid clock bootstrap" }
+            serverUnix - sampledAt
+        }.getOrDefault(0L)
         fun signedRequest(path: String, method: String, body: String? = null, key: String? = null): JSONObject {
-            val proof = if (BuildConfig.DEVICE_PROOF) DeviceProof.headers(identity.id, method, path, body) else emptyMap()
+            val proof = if (BuildConfig.DEVICE_PROOF) DeviceProof.headers(identity.id, method, path, body,
+                System.currentTimeMillis() / 1000 + clockOffsetSeconds) else emptyMap()
             return BackendTransport.request(BackendAddress.value(), path, method, body, key, proof)
         }
         signedRequest("/api/v1/register", "POST", payload.toString())
