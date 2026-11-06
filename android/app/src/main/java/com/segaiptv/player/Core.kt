@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -17,7 +19,7 @@ import java.security.MessageDigest
 import java.util.UUID
 
 // Protect the UI from very large playlists while reading the source as a stream.
-private const val MAX_CHANNELS_PER_PLAYLIST = 50000
+private const val MAX_CHANNELS_PER_PLAYLIST = 150000
 
 data class Playlist(val id: Int, val name: String, val url: String)
 data class Channel(val name: String, val url: String, val category: String, val logo: String, val playlist: String,
@@ -126,8 +128,31 @@ object Api {
         XtreamCatalogue.load(playlist, m3u, m3uFailed)
     }
 
+    suspend fun downloadPlaylistProgressive(playlist: Playlist,
+        onPartial: suspend (List<Channel>) -> Unit): PlaylistLoad = kotlinx.coroutines.coroutineScope {
+        val batches = kotlinx.coroutines.channels.Channel<List<Channel>>(kotlinx.coroutines.channels.Channel.CONFLATED)
+        val consumer = launch { for (batch in batches) onPartial(batch) }
+        try {
+            val result = withContext(Dispatchers.IO) {
+                val job = kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]
+                val connection = NetworkClient.open(URL(PlaylistSource.normalize(playlist.url)))
+                connection.connectTimeout = 14000; connection.readTimeout = 18000
+                connection.setRequestProperty("Accept", "audio/x-mpegurl, text/plain, */*")
+                try {
+                    check(connection.responseCode in 200..299) { "Playlist unavailable" }
+                    connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+                        M3uParser.parseLines(reader.lineSequence(), playlist.name, playlist.url,
+                            onPartial = { batches.trySend(it) }, check = { job?.ensureActive() })
+                    }
+                } finally { connection.disconnect() }
+            }
+            batches.close(); consumer.join()
+            PlaylistLoad(result)
+        } finally { batches.cancel(); consumer.cancel() }
+    }
+
     private fun downloadSource(source: String, listName: String): List<Channel> {
-        val connection = URL(source).openConnection() as HttpURLConnection
+        val connection = NetworkClient.open(URL(source))
         connection.connectTimeout = 14000
         connection.readTimeout = 18000
         connection.setRequestProperty("Accept", "audio/x-mpegurl, application/vnd.apple.mpegurl, text/plain, */*")
@@ -170,7 +195,11 @@ object M3uParser {
     fun parse(text: String, listName: String, baseUrl: String): List<Channel> =
         parseLines(text.lineSequence(), listName, baseUrl)
 
-    fun parseLines(lines: Sequence<String>, listName: String, baseUrl: String): List<Channel> {
+    fun parseLines(lines: Sequence<String>, listName: String, baseUrl: String,
+        onPartial: (List<Channel>) -> Unit = {}, check: () -> Unit = {}): List<Channel> {
+        var published = 0
+        var lastPublish = System.nanoTime()
+        var characters = 0L
         val channels = mutableListOf<Channel>()
         var title = ""
         var group = "غير مصنف"
@@ -179,6 +208,9 @@ object M3uParser {
         var details = emptyMap<String, String>()
         var epgUrl = ""
         for (line in lines) {
+            check()
+            characters += line.length
+            require(characters <= 128L * 1024 * 1024) { "Playlist too large" }
             val trimmed = line.trim().trimStart('\uFEFF')
             when {
                 trimmed.startsWith("#EXTM3U", ignoreCase = true) -> {
@@ -227,11 +259,17 @@ object M3uParser {
                     title = ""; group = "غير مصنف"; logo = ""; details = emptyMap()
                 }
             }
-            if (channels.size >= MAX_CHANNELS_PER_PLAYLIST) break
+            if (channels.size > MAX_CHANNELS_PER_PLAYLIST) error("Playlist too large")
+            val now = System.nanoTime()
+            if (channels.size > published && (published == 0 && channels.size >= 30 ||
+                    channels.size - published >= 250 && now - lastPublish >= 250_000_000L)) {
+                onPartial(channels.toList()); published = channels.size; lastPublish = now
+            }
         }
         return channels
     }
 }
+
 
 
 

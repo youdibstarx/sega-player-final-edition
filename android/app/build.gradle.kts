@@ -14,8 +14,8 @@ android {
         applicationId = "com.segaiptv.player"
         minSdk = 26
         targetSdk = 35
-        versionCode = 34
-        versionName = "0.5.16"
+        versionCode = 35
+        versionName = "0.5.17"
         // Android Emulator: 10.0.2.2; physical device: your PC LAN IP / domain.
         val backendUrl = providers.gradleProperty("SEGA_IPTV_BACKEND_URL")
             .orElse("https://sega.faster4k.xyz").get()
@@ -65,6 +65,7 @@ android {
         buildConfig = true
     }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -79,6 +80,11 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
+    implementation("androidx.media3:media3-datasource-okhttp:1.11.1")
+    implementation("com.wireguard.android:tunnel:1.0.20260102")
     val composeBom = platform("androidx.compose:compose-bom:2025.12.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
@@ -100,6 +106,7 @@ dependencies {
     testImplementation("org.json:json:20240303")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
+
 
 
 

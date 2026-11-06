@@ -121,5 +121,37 @@
     <string name="update_failed">تعذّر التحقق من التحديث أو تثبيته. أعد المحاولة.</string>
     <string name="update_downloading">جارٍ تنزيل ملف التطبيق والتحقق منه…</string>
     <string name="update_permission">اسمح بالتثبيت من هذا التطبيق ثم ارجع واضغط على تحديث.</string>
+
+    <string name="subscriptions_title">اشتراكاتي</string>
+    <string name="connection_settings">إعدادات الاتصال</string>
+    <string name="dns_hint">DNS خاص بهذا التطبيق. أعد فتح المشاهدة بعد التغيير. عند تشغيل VPN تُستخدم إعدادات DNS الخاصة به.</string>
+    <string name="dns_automatic">تلقائي · DNS الجهاز</string>
+    <string name="vpn_hint">استورد ملف WireGuard بصيغة .conf الخاص بك. الاتصال يخص هذا التطبيق فقط حسب مسارات الملف. تشغيله يستبدل أي VPN نشط آخر. لا توجد إعادة اتصال تلقائية أو خاصية منع الاتصال خارج VPN.</string>
+    <string name="vpn_connected">نفق VPN مفعّل</string>
+    <string name="vpn_disconnected">VPN غير متصل</string>
+    <string name="vpn_profile_saved">الملف محفوظ بشكل مشفّر على هذا الجهاز</string>
+    <string name="vpn_import">استيراد ملف WireGuard .conf</string>
+    <string name="vpn_connect">تشغيل VPN</string>
+    <string name="vpn_disconnect">قطع اتصال VPN</string>
+    <string name="vpn_remove">حذف الملف المحفوظ</string>
+    <string name="vpn_error">تعذر إكمال العملية. تحقق من ملف WireGuard وموافقة Android على تشغيل VPN.</string>
+    <string name="weather_choose">اختيار مدينة الطقس</string>
+    <string name="weather_unavailable">الطقس غير متوفر</string>
+    <string name="weather_loading">تحميل الطقس…</string>
+    <string name="weather_attribution">توقعات: MET Norway · CC BY 4.0</string>
+    <string name="weather_privacy">اختر مدينة لإرسال إحداثياتها إلى MET Norway لجلب توقعات الطقس. لا نستخدم GPS.</string>
+    <string name="weather_custom">مدينة أخرى بالإحداثيات</string>
+    <string name="weather_city">اسم المدينة</string>
+    <string name="weather_lat">خط العرض مثل 33.59</string>
+    <string name="weather_lon">خط الطول مثل -7.62</string>
+    <string name="weather_disable">إخفاء الطقس</string>
+    <string name="app_activation_expiry">انتهاء تفعيل التطبيق</string>
+    <string name="provider_expiry">انتهاء اشتراك M3U</string>
+    <string name="subscription_loading">التحقق من الانتهاء…</string>
+    <string name="subscription_unknown">تاريخ الانتهاء غير متوفر</string>
+    <string name="subscription_expired">منتهي الصلاحية</string>
+    <string name="subscription_unlimited">غير محدود</string>
+    <string name="subscription_days">متبقي %1$d يوم</string>
 </resources>
+
 

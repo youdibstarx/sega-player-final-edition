@@ -189,13 +189,13 @@ fun PlaylistScreen(config: AppConfig, loading: Boolean, warnings: String, onRefr
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 16.dp)) {
             items(config.playlists) { playlist ->
                 Column(Modifier.fillMaxWidth().background(v3Panel).padding(16.dp)) {
-                    Text(playlist.name, color = Color.White, fontSize = 19.sp)
-                    Text(tr(R.string.managed_playlist), color = Color.LightGray)
+                    SubscriptionCard(playlist, Modifier.fillMaxWidth())
                 }
             }
             if (config.playlists.isEmpty()) item { Text(tr(R.string.no_playlists), color = Color.LightGray) }
         }
     }
 }
+
 
 

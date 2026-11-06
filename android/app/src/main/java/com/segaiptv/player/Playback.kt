@@ -110,7 +110,11 @@ private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls
                 .setPrioritizeTimeOverSizeThresholds(false)
                 .build()
             val created = ExoPlayer.Builder(context.applicationContext, renderers)
-                .setLoadControl(loadControl).build()
+                .setLoadControl(loadControl)
+                .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context)
+                    .setDataSourceFactory(androidx.media3.datasource.DefaultDataSource.Factory(context,
+                        androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(NetworkClient.client))))
+                .build()
             owned = created
             created.setAudioAttributes(AudioAttributes.DEFAULT, true)
             created.setHandleAudioBecomingNoisy(true)
@@ -263,4 +267,5 @@ fun PlaybackScreen(channel: Channel, accent: Color, onBack: () -> Unit,
         }
     }
 }
+
 

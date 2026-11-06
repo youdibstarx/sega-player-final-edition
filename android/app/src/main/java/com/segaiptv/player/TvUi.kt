@@ -101,7 +101,7 @@ fun TvShell(
         when (page) {
             "channels", "movies", "series" -> CategoryBrowser(
                 Modifier.weight(1f), config.playlists, page, channels, loading,
-                favorites, accent, query, refreshToken, onPlay, onToggleFavorite, onCategoryLoaded, onChoose = { query = "" }, memory = categoryMemory)
+                favorites, accent, query, refreshToken, onPlay, onToggleFavorite, onCategoryLoaded, onChoose = { query = "" }, memory = categoryMemory, m3uOnly = true)
             "favorites" -> LiveTvV3(Modifier.weight(1f), channels.filter { it.url in favorites }, loading,
                 favorites, catalogueWarnings(warnings), onPlay, onToggleFavorite, includeVod = true, search = query)
             "playlists" -> PlaylistScreen(config, loading, warnings, onRefresh, onLocalFile, Modifier.weight(1f))
@@ -137,7 +137,7 @@ private fun TvLanding(config: AppConfig, identity: DeviceIdentity, channelCount:
             Text("SEGA PLAYER V3", fontSize = 22.sp, fontWeight = FontWeight.Black,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f))
-            Text("● " + tr(R.string.active_device), fontSize = 13.sp, color = Color(0xFF75E2A8))
+            HomeClockWeather()
         }
         Spacer(Modifier.height(18.dp))
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -149,11 +149,13 @@ private fun TvLanding(config: AppConfig, identity: DeviceIdentity, channelCount:
                     Triple(R.drawable.tile_movies, tr(R.string.movies), "movies"),
                     Triple(R.drawable.tile_series, tr(R.string.series), "series"),
                     Triple(R.drawable.tile_favorites, tr(R.string.favorites), "favorites"),
-                    Triple(R.drawable.tile_playlists, tr(R.string.playlists), "playlists"),
+                    Triple(R.drawable.tile_playlists, tr(R.string.subscriptions_title), "playlists"),
                     Triple(R.drawable.tile_settings, tr(R.string.settings), "settings")
                 )
                 tiles.forEachIndexed { index, tile ->
-                    ThemeArtworkTile(tile.first, tile.second, accent,
+                    if (tile.third == "playlists") SubscriptionTile(config, Modifier.weight(1f).height(cardHeight)) {
+                        onPageChange("playlists")
+                    } else ThemeArtworkTile(tile.first, tile.second, accent,
                         Modifier.weight(1f).height(cardHeight)
                             .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)) {
                         onPageChange(tile.third)
@@ -161,6 +163,7 @@ private fun TvLanding(config: AppConfig, identity: DeviceIdentity, channelCount:
                 }
             }
         }
+        SubscriptionStrip(config)
         WatchHistory(onPlay, channels)
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -399,6 +402,9 @@ private fun TvSettings(config: AppConfig, identity: DeviceIdentity, count: Int,
                 ChannelOrderPicker(openChannels, Modifier.weight(1.25f))
                 ViewerSettings(channels, warnings, error, loading, Modifier.weight(1f))
             }
+            SettingsGroup(tr(R.string.connection_settings)) {
+                ConnectionSettings(Modifier.fillMaxWidth())
+            }
             SettingsGroup(tr(R.string.update_group)) {
                 TvAction(tr(R.string.update_check), Modifier.fillMaxWidth(), onClick = checkUpdates)
             }
@@ -474,5 +480,6 @@ fun TvVideoScreen(channel: Channel, accent: Color, onBack: () -> Unit,
 ) {
     PlaybackScreen(channel, accent, onBack, isFavorite, onFavorite)
 }
+
 
 
