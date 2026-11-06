@@ -56,7 +56,7 @@ internal fun HomeClockWeather() {
                 reading == null -> tr(R.string.weather_loading)
                 else -> "${WeatherRepository.icon(reading.symbol)} ${kotlin.math.round(reading.temperature).toInt()}°C · ${place!!.name}"
             }
-            TvAction(label) { choosing = true }
+            TvAction(label, Modifier.widthIn(max = 200.dp)) { choosing = true }
             if (place != null) Text(tr(R.string.weather_attribution), fontSize = 8.sp, color = Color.LightGray)
         }
     }

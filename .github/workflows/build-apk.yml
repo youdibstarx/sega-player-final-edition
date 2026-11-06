@@ -33,6 +33,15 @@ jobs:
           else
             gradle :app:testDebugUnitTest :app:assembleHardened
           fi
+      - name: Preserve test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SEGA-Android-test-reports
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/test-results/
+          if-no-files-found: ignore
       - name: Verify independent protected application
         run: |
           APK=android/app/build/outputs/apk/hardened/app-hardened-unsigned.apk

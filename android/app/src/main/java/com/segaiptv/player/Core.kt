@@ -141,8 +141,12 @@ object Api {
                 try {
                     check(connection.responseCode in 200..299) { "Playlist unavailable" }
                     connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
-                        M3uParser.parseLines(reader.lineSequence(), playlist.name, playlist.url,
-                            onPartial = { batches.trySend(it) }, check = { job?.ensureActive() })
+                        val lines = reader.lineSequence().iterator()
+                        var first = ""
+                        while (first.isBlank() && lines.hasNext()) { job?.ensureActive(); first = lines.next().trim().trimStart('﻿') }
+                        require(first.startsWith("#EXTM3U", true) || first.startsWith("#EXTINF", true)) { "Invalid M3U" }
+                        M3uParser.parseLines(sequenceOf(first) + lines.asSequence(), playlist.name, connection.url.toString(),
+                            onPartial = { batches.trySend(it) }, check = { job?.ensureActive() }, sourceUrl = playlist.url)
                     }
                 } finally { connection.disconnect() }
             }
@@ -196,7 +200,7 @@ object M3uParser {
         parseLines(text.lineSequence(), listName, baseUrl)
 
     fun parseLines(lines: Sequence<String>, listName: String, baseUrl: String,
-        onPartial: (List<Channel>) -> Unit = {}, check: () -> Unit = {}): List<Channel> {
+        onPartial: (List<Channel>) -> Unit = {}, check: () -> Unit = {}, sourceUrl: String = baseUrl): List<Channel> {
         var published = 0
         var lastPublish = System.nanoTime()
         var characters = 0L
@@ -252,7 +256,7 @@ object M3uParser {
                             season = (details["season"] ?: details["season-number"])?.toIntOrNull(),
                             episode = (details["episode"] ?: details["episode-number"])?.toIntOrNull(),
                             description = details["plot"] ?: details["description"].orEmpty(),
-                            sourceUrl = baseUrl, seriesId = details["series-id"].orEmpty(),
+                            sourceUrl = sourceUrl, seriesId = details["series-id"].orEmpty(),
                             streamId = details["stream-id"].orEmpty(),
                             epgId = details["tvg-id"].orEmpty(), epgUrl = epgUrl)
                     }

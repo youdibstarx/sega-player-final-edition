@@ -26,15 +26,17 @@ internal object NetworkClient {
     private fun resolver(url: String, vararg ips: String): Dns = DnsOverHttps.Builder()
         .client(bootstrap).url(url.toHttpUrl())
         .bootstrapDnsHosts(ips.map { InetAddress.getByName(it) }).build()
-    val client: OkHttpClient = bootstrap.newBuilder().dns { hostname ->
+    val client: OkHttpClient = bootstrap.newBuilder().dns(object : Dns {
+        override fun lookup(hostname: String): List<InetAddress> {
         // Let a customer VPN resolve its own private domains and avoid bypassing its DNS policy.
         val resolver = if (vpnActive()) Dns.SYSTEM else when (mode) {
             DnsMode.AUTOMATIC -> Dns.SYSTEM
             DnsMode.GOOGLE -> google
             DnsMode.CLOUDFLARE -> cloudflare
         }
-        resolver.lookup(hostname)
-    }.build()
+        return resolver.lookup(hostname)
+        }
+    }).build()
     fun initialize(app: Context) {
         context = app.applicationContext
         mode = runCatching { DnsMode.valueOf(app.getSharedPreferences("network", Context.MODE_PRIVATE)
@@ -46,7 +48,7 @@ internal object NetworkClient {
         app.getSharedPreferences("network", Context.MODE_PRIVATE).edit().putString("dns", selected.name).apply()
         resetConnections()
     }
-    fun resetConnections() { client.connectionPool.evictAll() }
+    fun resetConnections() { client.dispatcher.cancelAll(); client.connectionPool.evictAll() }
     fun vpnActive(): Boolean {
         val cm = context?.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
         return cm.getNetworkCapabilities(cm.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true

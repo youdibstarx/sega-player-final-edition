@@ -44,6 +44,23 @@ class CategoryBrowserTest {
         compose.onNodeWithText("Sample movie").assertIsDisplayed()
         compose.runOnIdle { assertEquals(1,categoryCalls); assertEquals(1,entryCalls) }
     }
+    @Test fun m3uRowsAreUsableWhileTheRestOfTheSourceIsLoading() {
+        compose.activity.getSharedPreferences("segaiptv_ui", Context.MODE_PRIVATE).edit().putString("language", "en").commit()
+        val playlist = Playlist(1, "Provider", "https://provider.test/get.php?username=a&password=b")
+        val entries = androidx.compose.runtime.mutableStateOf(listOf(Channel("First movie", "https://provider.test/movie/1.mp4", "First group", "", "Provider", mediaType = "movie", sourceUrl = playlist.url)))
+        compose.setContent {
+            LanguageHost(onExit = {}) {
+                CategoryBrowser(Modifier, listOf(playlist), "movies", entries.value, true,
+                    emptySet(), Color.Yellow, "", 0, {}, {}, {}, {},
+                    loadCategories = { _, _ -> error("M3U must not fetch API categories") }, m3uOnly = true)
+            }
+        }
+        compose.onNodeWithText("First group (1)").performClick()
+        compose.onNodeWithText("First movie").assertIsDisplayed()
+        compose.runOnIdle { entries.value = entries.value + Channel("Later movie", "https://provider.test/movie/2.mp4", "First group", "", "Provider", mediaType = "movie", sourceUrl = playlist.url) }
+        compose.onNodeWithText("Later movie").assertIsDisplayed()
+    }
+
     @Test fun favoriteMetadataSurvivesReloadButRemovedSourcesAreExcluded() = kotlinx.coroutines.runBlocking {
         val playlist = Playlist(1, "Test", "https://provider.test/get.php?username=demo&password=test")
         val channel = Channel("Movie", "https://provider.test/movie/demo/test/1.mkv", "Drama", "", "Test", mediaType = "movie", sourceUrl = playlist.url)
@@ -81,3 +98,4 @@ class CategoryBrowserTest {
         compose.runOnIdle { assertEquals(2, calls.size) }
     }
 }
+
