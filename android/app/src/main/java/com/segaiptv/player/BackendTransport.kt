@@ -10,6 +10,9 @@ import org.json.JSONObject
 /** Explicit server denial, distinct from a temporary network failure. No response data retained. */
 internal class BackendAccessDenied : IllegalStateException("Backend access denied")
 
+/** Non-authentication HTTP status; does not contain server responses or credentials. */
+internal class BackendHttpError(val statusCode: Int) : IllegalStateException("Backend HTTP $statusCode")
+
 /** Applies only to the control panel. Provider media URLs have independent transport requirements. */
 internal object BackendTransport {
     internal const val MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -58,9 +61,11 @@ internal object BackendTransport {
             val status = con.responseCode
             if (status == 401 || status == 403) throw BackendAccessDenied()
             // Never follow a Location header carrying a device key or registration body.
-            check(status in 200..299) { "Backend request rejected" }
+            if (status !in 200..299) throw BackendHttpError(status)
             check(con.contentLengthLong <= MAX_RESPONSE_BYTES) { "Backend response too large" }
             return con.inputStream.use { JSONObject(readBounded(it)) }
+        } catch (http: BackendHttpError) {
+            throw http
         } catch (denied: BackendAccessDenied) {
             throw denied
         } catch (_: javax.net.ssl.SSLException) {
