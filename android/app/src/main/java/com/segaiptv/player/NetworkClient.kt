@@ -23,18 +23,28 @@ internal object NetworkClient {
         .connectTimeout(12, TimeUnit.SECONDS).readTimeout(18, TimeUnit.SECONDS).build()
     private val google by lazy { resolver("https://dns.google/dns-query", "8.8.8.8", "8.8.4.4") }
     private val cloudflare by lazy { resolver("https://cloudflare-dns.com/dns-query", "1.1.1.1", "1.0.0.1") }
-    private fun resolver(url: String, vararg ips: String): Dns = DnsOverHttps.Builder()
-        .client(bootstrap).url(url.toHttpUrl())
-        .bootstrapDnsHosts(ips.map { InetAddress.getByName(it) }).build()
+    private fun resolver(url: String, vararg ips: String): Dns = try {
+        DnsOverHttps.Builder().client(bootstrap).url(url.toHttpUrl())
+            .bootstrapDnsHosts(ips.map { InetAddress.getByName(it) }).build()
+    } catch (_: Exception) {
+        Dns.SYSTEM
+    }
     val client: OkHttpClient = bootstrap.newBuilder().dns(object : Dns {
         override fun lookup(hostname: String): List<InetAddress> {
-        // Let a customer VPN resolve its own private domains and avoid bypassing its DNS policy.
-        val resolver = if (vpnActive()) Dns.SYSTEM else when (mode) {
-            DnsMode.AUTOMATIC -> Dns.SYSTEM
-            DnsMode.GOOGLE -> google
-            DnsMode.CLOUDFLARE -> cloudflare
-        }
-        return resolver.lookup(hostname)
+            // Let a customer VPN resolve its own private domains and avoid bypassing its DNS policy.
+            val resolver = if (vpnActive()) Dns.SYSTEM else when (mode) {
+                DnsMode.AUTOMATIC -> Dns.SYSTEM
+                DnsMode.GOOGLE -> google
+                DnsMode.CLOUDFLARE -> cloudflare
+            }
+            if (resolver === Dns.SYSTEM) return Dns.SYSTEM.lookup(hostname)
+            return try {
+                resolver.lookup(hostname).ifEmpty { Dns.SYSTEM.lookup(hostname) }
+            } catch (_: Exception) {
+                // A DoH outage, blocked endpoint or older Android TLS issue must not
+                // crash playback or the app; fall back to the device's resolver.
+                Dns.SYSTEM.lookup(hostname)
+            }
         }
     }).build()
     fun initialize(app: Context) {
@@ -45,15 +55,20 @@ internal object NetworkClient {
     }
     fun select(app: Context, selected: DnsMode) {
         mode = selected
-        app.getSharedPreferences("network", Context.MODE_PRIVATE).edit().putString("dns", selected.name).apply()
-        resetConnections()
+        runCatching {
+            app.applicationContext.getSharedPreferences("network", Context.MODE_PRIVATE)
+                .edit().putString("dns", selected.name).apply()
+        }
+        // Keep active streams and activation requests alive. New connections use
+        // the selected resolver; existing pooled connections remain undisturbed.
     }
-    // Do not cancel active requests when a DNS mode changes; that can interrupt activation and catalogue loads.
-    // Evict pooled idle connections so new requests resolve through the selected DNS.
+    // Used when VPN routing changes. DNS selection itself leaves active requests untouched.
     fun resetConnections() { client.connectionPool.evictAll() }
     fun vpnActive(): Boolean {
-        val cm = context?.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
-        return cm.getNetworkCapabilities(cm.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+        return try {
+            val cm = context?.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+            cm.getNetworkCapabilities(cm.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+        } catch (_: Exception) { false }
     }
     fun open(url: URL): HttpURLConnection = DnsHttpConnection(url, client)
 }
