@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "com.segaiptv.player"
-        minSdk = 26
+        minSdk = 24
         targetSdk = 35
         versionCode = 35
         versionName = "0.5.17"
