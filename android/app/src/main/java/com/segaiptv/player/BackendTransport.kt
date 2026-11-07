@@ -37,7 +37,7 @@ internal object BackendTransport {
         return output.toString("UTF-8")
     }
     internal fun request(base: String, path: String, method: String, payload: String? = null,
-        deviceKey: String? = null, proofHeaders: Map<String, String> = emptyMap(), open: (URL) -> HttpsURLConnection = { it.openConnection() as HttpsURLConnection }): JSONObject {
+        deviceKey: String? = null, proofHeaders: Map<String, String> = emptyMap(), open: (URL) -> HttpsURLConnection = { NetworkClient.open(it) as HttpsURLConnection }): JSONObject {
         val url = endpoint(base, path)
         var connection: HttpsURLConnection? = null
         try {
@@ -78,5 +78,6 @@ internal object BackendTransport {
         } finally { connection?.disconnect() }
     }
 }
+
 
 

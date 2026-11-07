@@ -121,5 +121,38 @@
     <string name="update_failed">Could not check or install the update. Try again.</string>
     <string name="update_downloading">Downloading and verifying the APK…</string>
     <string name="update_permission">Allow installation from this app, then return and tap Update.</string>
+
+    <string name="subscriptions_title">My subscriptions</string>
+    <string name="connection_settings">Connection</string>
+    <string name="dns_hint">DNS applies to this app. Reopen playback after changing it. While a VPN is active, its DNS is used.</string>
+    <string name="dns_automatic">Automatic · device DNS</string>
+    <string name="vpn_hint">Import your WireGuard .conf profile. The VPN routes this app only, according to your profile. Connecting replaces another active VPN. No automatic reconnect or kill switch.</string>
+    <string name="vpn_connected">VPN tunnel enabled</string>
+    <string name="vpn_disconnected">VPN disconnected</string>
+    <string name="vpn_profile_saved">Profile saved securely on this device</string>
+    <string name="vpn_import">Import WireGuard .conf</string>
+    <string name="vpn_connect">Connect VPN</string>
+    <string name="vpn_disconnect">Disconnect VPN</string>
+    <string name="vpn_remove">Remove saved profile</string>
+    <string name="vpn_error">Unable to complete this operation. Check the WireGuard profile and Android VPN permission.</string>
+    <string name="weather_choose">Choose weather city</string>
+    <string name="weather_unavailable">Weather unavailable</string>
+    <string name="weather_loading">Loading weather…</string>
+    <string name="weather_attribution">Forecast: MET Norway · CC BY 4.0</string>
+    <string name="weather_privacy">Choose a city to send its coordinates to MET Norway for weather. GPS is not used.</string>
+    <string name="weather_custom">Another city (coordinates)</string>
+    <string name="weather_city">City name</string>
+    <string name="weather_lat">Latitude (e.g. 33.59)</string>
+    <string name="weather_lon">Longitude (e.g. -7.62)</string>
+    <string name="weather_disable">Hide weather</string>
+    <string name="app_activation_expiry">App activation expires</string>
+    <string name="provider_expiry">M3U subscription expires</string>
+    <string name="subscription_loading">Checking expiry…</string>
+    <string name="subscription_unknown">Expiry unavailable</string>
+    <string name="subscription_expired">Expired</string>
+    <string name="subscription_unlimited">Unlimited</string>
+    <string name="subscription_days">%1$d days left</string>
+    <string name="connection_and_updates">Connection and updates</string>
 </resources>
+
 

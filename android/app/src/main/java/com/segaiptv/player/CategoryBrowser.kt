@@ -36,9 +36,9 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
         }
     },
     loadEntries: suspend (ProviderCategory) -> List<Channel> = { CategoryCatalogue.entries(it) },
-    memory: CategoryMemory = remember { CategoryMemory() }) {
+    memory: CategoryMemory = remember { CategoryMemory() }, m3uOnly: Boolean = false) {
     val kind = when (page) { "movies" -> "vod"; "series" -> "series"; else -> "live" }
-    val providers = remember(playlists) { playlists.filter { XtreamSource.from(it.url) != null }.take(30) }
+    val providers = remember(playlists, m3uOnly) { if (m3uOnly) emptyList() else playlists.filter { XtreamSource.from(it.url) != null }.take(30) }
     val snapshot = memory.page(providers, refreshToken, kind)
     var categories by remember(snapshot) { mutableStateOf(snapshot.categories.orEmpty()) }
     var selectedKey by rememberSaveable(page, refreshToken) { mutableStateOf<String?>(null) }
@@ -51,8 +51,8 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
     var entriesError by remember(selectedKey, providers, refreshToken) { mutableStateOf(false) }
     val loadedCallback by rememberUpdatedState(onLoaded)
     // Plain/local M3U must be parsed first; exclude Xtream rows from the on-demand selection.
-    val localGroups = remember(channels, kind) {
-        channels.filter { XtreamSource.from(it.sourceUrl) == null && when (kind) {
+    val localGroups = remember(channels, kind, m3uOnly) {
+        channels.filter { (m3uOnly || XtreamSource.from(it.sourceUrl) == null) && when (kind) {
             "vod" -> isVodEntry(it, false)
             "series" -> isVodEntry(it, true)
             else -> !isVodEntry(it, false) && !isVodEntry(it, true)
@@ -157,4 +157,5 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
         }
     }
 }
+
 

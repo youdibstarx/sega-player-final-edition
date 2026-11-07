@@ -71,7 +71,7 @@ internal object ProviderOrder {
                 ?.let { return@withLock it.second }
             val context = currentCoroutineContext()
             val started = System.nanoTime()
-            val con = URL(PlaylistSource.normalize(playlist.url)).openConnection() as HttpURLConnection
+            val con = NetworkClient.open(URL(PlaylistSource.normalize(playlist.url)))
             con.connectTimeout = 12000
             con.readTimeout = 18000
             con.setRequestProperty("Accept", "audio/x-mpegurl, text/plain, */*")
@@ -92,4 +92,5 @@ internal object ProviderOrder {
         }
     }
 }
+
 

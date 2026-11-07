@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         CrashDiagnostics.install(applicationContext)
+        NetworkClient.initialize(applicationContext)
         window.statusBarColor = android.graphics.Color.rgb(9, 9, 14)
         window.navigationBarColor = android.graphics.Color.rgb(9, 9, 14)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -188,22 +189,26 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
                 // Reuse loaded objects on manual refresh instead of deserializing a second library.
                 val existing = remoteChannels.groupBy { it.sourceUrl }
                 val cached = mutableMapOf<Int, List<Channel>>()
-                for (playlist in freshConfig.playlists.filter { XtreamSource.from(it.url) == null }.take(30)) {
+                for (playlist in freshConfig.playlists.take(30)) {
                     cached[playlist.id] = existing[playlist.url] ?: LibraryCache.read(context, playlist)
                 }
                 remoteChannels = cached.values.flatten()
                 LibraryCache.prune(context, freshConfig.playlists)
                 val loaded = mutableListOf<Channel>()
                 val failed = mutableListOf<String>()
-                for (playlist in freshConfig.playlists.filter { XtreamSource.from(it.url) == null }.take(30)) {
+                for (playlist in freshConfig.playlists.take(30)) {
                     try {
-                        val fresh = Api.downloadPlaylist(playlist)
+                        val fresh = Api.downloadPlaylistProgressive(playlist) { partial ->
+                            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                remoteChannels = loaded.toList() + partial
+                            }
+                        }
                         val result = mergeCachedCatalogue(fresh, cached.remove(playlist.id).orEmpty())
                         loaded += result.entries
                         if (fresh.warnings.isEmpty() || fresh.entries.isNotEmpty())
                             LibraryCache.write(context, playlist, result.entries)
                         failed += result.warnings.map { "${playlist.name}: $it" }
-                        val pendingIds = freshConfig.playlists.filter { XtreamSource.from(it.url) == null }.take(30).dropWhile { it.id != playlist.id }.drop(1).map { it.id }
+                        val pendingIds = freshConfig.playlists.take(30).dropWhile { it.id != playlist.id }.drop(1).map { it.id }
                         remoteChannels = loaded + pendingIds.flatMap { cached[it].orEmpty() }
 
                     }
@@ -750,6 +755,7 @@ private fun VideoScreen(channel: Channel, accent: Color, onBack: () -> Unit,
     isFavorite: Boolean, onFavorite: () -> Unit) {
     PlaybackScreen(channel, accent, onBack, isFavorite, onFavorite)
 }
+
 
 
 

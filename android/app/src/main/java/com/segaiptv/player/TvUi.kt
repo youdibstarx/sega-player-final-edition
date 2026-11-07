@@ -101,10 +101,11 @@ fun TvShell(
         when (page) {
             "channels", "movies", "series" -> CategoryBrowser(
                 Modifier.weight(1f), config.playlists, page, channels, loading,
-                favorites, accent, query, refreshToken, onPlay, onToggleFavorite, onCategoryLoaded, onChoose = { query = "" }, memory = categoryMemory)
+                favorites, accent, query, refreshToken, onPlay, onToggleFavorite, onCategoryLoaded, onChoose = { query = "" }, memory = categoryMemory, m3uOnly = true)
             "favorites" -> LiveTvV3(Modifier.weight(1f), channels.filter { it.url in favorites }, loading,
                 favorites, catalogueWarnings(warnings), onPlay, onToggleFavorite, includeVod = true, search = query)
-            "playlists" -> PlaylistScreen(config, loading, warnings, onRefresh, onLocalFile, Modifier.weight(1f))
+            "playlists" -> PlaylistScreen(config, identity, loading, warnings, onRefresh, onLocalFile,
+                onCopyMac, onCopyKey, Modifier.weight(1f))
             else -> TvSettings(config, identity, channels.size, accent, error,
                 onCopyMac, onCopyKey, Modifier.weight(1f), channels, warnings, loading, updates, { onPageChange("channels") })
         }
@@ -137,11 +138,12 @@ private fun TvLanding(config: AppConfig, identity: DeviceIdentity, channelCount:
             Text("SEGA PLAYER V3", fontSize = 22.sp, fontWeight = FontWeight.Black,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f))
-            Text("● " + tr(R.string.active_device), fontSize = 13.sp, color = Color(0xFF75E2A8))
+            HomeClockWeather()
         }
         Spacer(Modifier.height(18.dp))
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            val cardHeight = minOf(maxHeight * .84f, ((maxWidth - 50.dp) / 6f) * (464f / 400f))
+            // Slightly taller artwork makes the six navigation cards feel balanced on TV screens.
+            val cardHeight = minOf(maxHeight * .90f, ((maxWidth - 50.dp) / 6f) * 1.25f)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 val tiles = listOf(
@@ -149,7 +151,7 @@ private fun TvLanding(config: AppConfig, identity: DeviceIdentity, channelCount:
                     Triple(R.drawable.tile_movies, tr(R.string.movies), "movies"),
                     Triple(R.drawable.tile_series, tr(R.string.series), "series"),
                     Triple(R.drawable.tile_favorites, tr(R.string.favorites), "favorites"),
-                    Triple(R.drawable.tile_playlists, tr(R.string.playlists), "playlists"),
+                    Triple(R.drawable.tile_playlists, tr(R.string.subscriptions_title), "playlists"),
                     Triple(R.drawable.tile_settings, tr(R.string.settings), "settings")
                 )
                 tiles.forEachIndexed { index, tile ->
@@ -161,9 +163,15 @@ private fun TvLanding(config: AppConfig, identity: DeviceIdentity, channelCount:
                 }
             }
         }
-        WatchHistory(onPlay, channels)
-        Spacer(Modifier.height(10.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(tr(R.string.app_activation_expiry), color = Color.LightGray, fontSize = 12.sp)
+            Text(config.expires.substringBefore('T').substringBefore(' ').ifBlank { tr(R.string.unspecified) },
+                color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically) {
+            WatchHistory(onPlay, channels)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TvAction("↻ " + tr(R.string.refresh), onClick = onRefresh)
                 TvAction("⏻ " + tr(R.string.exit_app), onClick = onExit)
@@ -399,8 +407,9 @@ private fun TvSettings(config: AppConfig, identity: DeviceIdentity, count: Int,
                 ChannelOrderPicker(openChannels, Modifier.weight(1.25f))
                 ViewerSettings(channels, warnings, error, loading, Modifier.weight(1f))
             }
-            SettingsGroup(tr(R.string.update_group)) {
-                TvAction(tr(R.string.update_check), Modifier.fillMaxWidth(), onClick = checkUpdates)
+            SettingsGroup(tr(R.string.connection_and_updates)) {
+                ConnectionSettings(Modifier.weight(1f))
+                TvAction(tr(R.string.update_check), Modifier.weight(1.4f), onClick = checkUpdates)
             }
         }
     }
@@ -474,5 +483,6 @@ fun TvVideoScreen(channel: Channel, accent: Color, onBack: () -> Unit,
 ) {
     PlaybackScreen(channel, accent, onBack, isFavorite, onFavorite)
 }
+
 
 

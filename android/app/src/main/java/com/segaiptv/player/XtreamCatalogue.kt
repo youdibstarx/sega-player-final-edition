@@ -63,7 +63,7 @@ internal object XtreamCatalogue {
     private fun JSONObject.text(key: String) = optString(key, "").takeUnless { it == "null" }.orEmpty()
     private fun JSONArray.objects() = (0 until minOf(length(), LIMIT)).mapNotNull { optJSONObject(it) }
     internal fun request(url: String): String {
-        val con = URL(url).openConnection() as HttpURLConnection
+        val con = NetworkClient.open(URL(url))
         con.connectTimeout = 12000
         con.readTimeout = 18000
         con.setRequestProperty("Accept", "application/json")
@@ -183,3 +183,4 @@ internal object XtreamCatalogue {
         parseEpisodes(source, show, request(source.api("get_series_info", show.seriesId)))
     }
 }
+

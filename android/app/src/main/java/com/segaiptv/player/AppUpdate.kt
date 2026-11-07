@@ -29,7 +29,7 @@ private fun ByteArray.hex() = joinToString("") { "%02x".format(it.toInt() and 25
 
 private fun <T> fetchReleaseFile(name: String, read: (InputStream) -> T): T {
     val url = URL(BackendAddress.value().trimEnd('/') + "/sega-updates/" + name)
-    val connection = url.openConnection() as HttpsURLConnection
+    val connection = NetworkClient.open(url) as HttpsURLConnection
     try {
         connection.instanceFollowRedirects = false
         connection.useCaches = false
@@ -144,3 +144,4 @@ internal fun rememberUpdatePrompt(): () -> Unit {
         }, dismissButton = { TextButton(onClick = { shown = false }) { Text(tr(R.string.close)) } })
     return { check(true) }
 }
+
