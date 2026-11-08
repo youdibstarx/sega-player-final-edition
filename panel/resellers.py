@@ -2,6 +2,7 @@
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 import hashlib
+import json
 import hmac
 import re
 import secrets
@@ -109,6 +110,13 @@ class ActivateDevice(BaseModel):
         return value
 
 
+def write_audit(db, action, object_type, object_id="", details=None, actor="admin", now_iso=None):
+    db.execute(
+        "INSERT INTO audit_log(action,actor,object_type,object_id,details,created_at) VALUES(?,?,?,?,?,?)",
+        (action, actor, str(object_id), json.dumps(details or {}, ensure_ascii=False), now_iso or "")
+    )
+
+
 def install_reseller_endpoints(APP, database, limiter, admin_only, now_iso, add_months):
     auth = HTTPBasic()
     root = APP
@@ -169,6 +177,7 @@ def install_reseller_endpoints(APP, database, limiter, admin_only, now_iso, add_
                     (email,password_salt,password_hash,role,parent_email,created_at)
                     VALUES(?,?,?,'main',NULL,?)""",
                     (payload.email, salt, digest, now_iso()))
+                write_audit(db, "reseller.created", "reseller", payload.email, {"role":"main"}, now_iso=now_iso())
         except sqlite3.IntegrityError:
             raise HTTPException(409, "Account already exists")
         return {"created": True, "email": payload.email}
@@ -185,8 +194,10 @@ def install_reseller_endpoints(APP, database, limiter, admin_only, now_iso, add_
             if row["role"] != "main":
                 raise HTTPException(403, "Only principal resellers may be credited by admin")
             db.execute("UPDATE resellers SET balance_units=balance_units+? WHERE email=?", (units,email))
+            created_at = now_iso()
             db.execute("""INSERT INTO reseller_transfers(source_email,target_email,units,action,created_at)
-                VALUES(NULL,?,?,'admin_topup',?)""", (email,units,now_iso()))
+                VALUES(NULL,?,?,'admin_topup',?)""", (email,units,created_at))
+            write_audit(db, "reseller.balance_topped_up", "reseller", email, {"points":units/2}, now_iso=created_at)
         return {"credited": True, "points": units/2}
 
     @root.get("/reseller/api/account")
@@ -218,6 +229,7 @@ def install_reseller_endpoints(APP, database, limiter, admin_only, now_iso, add_
                     (email,password_salt,password_hash,role,parent_email,created_at)
                     VALUES(?,?,?,'sub',?,?)""",
                     (payload.email,salt,digest,user["email"],now_iso()))
+                write_audit(db, "reseller.created", "reseller", payload.email, {"role":"sub"}, actor=user["email"], now_iso=now_iso())
         except sqlite3.IntegrityError:
             raise HTTPException(409, "Account already exists")
         return {"created":True,"email":payload.email}
@@ -239,8 +251,10 @@ def install_reseller_endpoints(APP, database, limiter, admin_only, now_iso, add_
                 raise HTTPException(409, "Insufficient balance")
             db.execute("UPDATE resellers SET balance_units=balance_units+? WHERE email=?",
                        (units,payload.email))
+            created_at = now_iso()
             db.execute("""INSERT INTO reseller_transfers(source_email,target_email,units,action,created_at)
-                VALUES(?,?,?,'transfer',?)""", (user["email"],payload.email,units,now_iso()))
+                VALUES(?,?,?,'transfer',?)""", (user["email"],payload.email,units,created_at))
+            write_audit(db, "reseller.balance_transferred", "reseller", payload.email, {"points":units/2}, actor=user["email"], now_iso=created_at)
         return {"transferred":True, "points":units/2}
 
     def mac_status(mac):
@@ -307,10 +321,13 @@ def install_reseller_endpoints(APP, database, limiter, admin_only, now_iso, add_
             db.execute("""INSERT INTO subscriptions(device_id,trial_used,plan) VALUES(?,1,?)
                 ON CONFLICT(device_id) DO UPDATE SET trial_used=1,plan=excluded.plan""",
                 (device["id"],payload.plan))
+            created_at = now_iso()
             db.execute("""INSERT INTO reseller_activations
                 (request_id,reseller_email,device_id,mac_alias,plan,cost_units,expires_at,created_at)
                 VALUES(?,?,?,?,?,?,?,?)""",
                 (payload.request_id,user["email"],device["id"],payload.mac,payload.plan,
-                 cost,expiry,now_iso()))
+                 cost,expiry,created_at))
+            write_audit(db, "device.activated_by_reseller", "device", device["id"],
+                {"mac":payload.mac,"plan":payload.plan,"expires_at":expiry}, actor=user["email"], now_iso=created_at)
         return {"activated":True,"already_processed":False,"mac":payload.mac,
                 "points_charged":cost/2,"expires_at":expiry}

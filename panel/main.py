@@ -1,17 +1,21 @@
 """SEGA IPTV Player control panel + device API. Uses only authorized M3U media sources."""
 import calendar
 import hashlib
+import io
+import json
 import hmac
 import os
 import re
 import sqlite3
+import os
+import tempfile
 from contextlib import contextmanager
 from datetime import date, datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.concurrency import run_in_threadpool
 from security import RateLimiter
@@ -137,10 +141,20 @@ def initialize():
         );
         CREATE TABLE IF NOT EXISTS personal_playlists (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            device_id TEXT NOT NULL UNIQUE REFERENCES devices(id) ON DELETE CASCADE,
+            device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
             name TEXT NOT NULL,
             url TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            actor TEXT NOT NULL DEFAULT 'admin',
+            object_type TEXT NOT NULL,
+            object_id TEXT NOT NULL DEFAULT '',
+            details TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS audit_log_created ON audit_log(created_at DESC);
         CREATE INDEX IF NOT EXISTS devices_mac_lookup ON devices(mac_alias);
         INSERT OR IGNORE INTO subscriptions(device_id) SELECT id FROM devices;
         INSERT OR IGNORE INTO settings VALUES
@@ -151,10 +165,44 @@ def initialize():
             db.execute("ALTER TABLE personal_playlists ADD COLUMN pin_salt TEXT")
         if "pin_hash" not in columns:
             db.execute("ALTER TABLE personal_playlists ADD COLUMN pin_hash TEXT")
+        # Migrate the former one-playlist-per-device UNIQUE constraint in place.
+        # Preserve playlist IDs and the existing per-device PIN hashes.
+        unique_device_index = False
+        for index in db.execute("PRAGMA index_list(personal_playlists)").fetchall():
+            if index["unique"]:
+                index_name = index["name"].replace('"', '""')
+                indexed_columns = [r["name"] for r in db.execute(
+                    f'PRAGMA index_info("{index_name}")').fetchall()]
+                if indexed_columns == ["device_id"]:
+                    unique_device_index = True
+                    break
+        if unique_device_index:
+            db.execute("""
+                CREATE TABLE personal_playlists_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    pin_salt TEXT,
+                    pin_hash TEXT
+                )
+            """)
+            db.execute("""INSERT INTO personal_playlists_new(id,device_id,name,url,pin_salt,pin_hash)
+                SELECT id,device_id,name,url,pin_salt,pin_hash FROM personal_playlists""")
+            db.execute("DROP TABLE personal_playlists")
+            db.execute("ALTER TABLE personal_playlists_new RENAME TO personal_playlists")
+        db.execute("CREATE INDEX IF NOT EXISTS personal_playlists_device ON personal_playlists(device_id,id)")
     initialize_resellers(database)
 
 
 initialize()
+
+
+def audit_event(db, action: str, object_type: str, object_id: str = "", details=None, actor: str = "admin"):
+    db.execute(
+        "INSERT INTO audit_log(action,actor,object_type,object_id,details,created_at) VALUES(?,?,?,?,?,?)",
+        (action, actor, object_type, str(object_id), json.dumps(details or {}, ensure_ascii=False), now_iso())
+    )
 
 
 def admin_only(request: Request, credentials: HTTPBasicCredentials = Depends(security)):
@@ -342,6 +390,84 @@ def admin_asset(file_name: str, _: bool = Depends(admin_only)):
     return FileResponse(BASE / "static" / file_name)
 
 
+
+@APP.get("/admin/api/audit")
+def admin_audit(_: bool = Depends(admin_only)):
+    with database() as db:
+        rows = [dict(row) for row in db.execute(
+            "SELECT id,action,actor,object_type,object_id,details,created_at FROM audit_log ORDER BY id DESC LIMIT 500"
+        ).fetchall()]
+    for row in rows:
+        try:
+            row["details"] = json.loads(row["details"])
+        except (TypeError, json.JSONDecodeError):
+            row["details"] = {}
+    return {"events": rows}
+
+
+def _sqlite_snapshot(target: Path):
+    source = sqlite3.connect(str(DB_FILE), timeout=10)
+    destination = sqlite3.connect(str(target), timeout=10)
+    try:
+        source.backup(destination)
+    finally:
+        destination.close()
+        source.close()
+
+
+@APP.get("/admin/api/backup")
+def download_backup(_: bool = Depends(admin_only)):
+    with database() as db:
+        db.execute("PRAGMA wal_checkpoint(FULL)")
+    with tempfile.NamedTemporaryFile(suffix=".sqlite") as temporary:
+        _sqlite_snapshot(Path(temporary.name))
+        temporary.seek(0)
+        data = temporary.read()
+    filename = "segaiptv-backup-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S") + ".sqlite"
+    return StreamingResponse(io.BytesIO(data), media_type="application/vnd.sqlite3",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@APP.post("/admin/api/restore")
+async def restore_backup(request: Request, _: bool = Depends(admin_only)):
+    filename = request.headers.get("X-Backup-Filename", "")
+    if not filename.lower().endswith((".sqlite", ".db")):
+        raise HTTPException(400, "اختر ملف SQLite بامتداد .sqlite أو .db")
+    raw = await request.body()
+    if len(raw) > 200 * 1024 * 1024:
+        raise HTTPException(413, "حجم النسخة الاحتياطية يتجاوز 200 ميغابايت")
+    descriptor, path = tempfile.mkstemp(prefix="sega-restore-", suffix=".sqlite", dir=str(DB_FILE.parent))
+    os.close(descriptor)
+    restore_path = Path(path)
+    safety_path = DB_FILE.parent / ("segaiptv-before-restore-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S") + ".sqlite")
+    try:
+        restore_path.write_bytes(raw)
+        check = sqlite3.connect(f"file:{restore_path}?mode=ro", uri=True)
+        try:
+            integrity = check.execute("PRAGMA integrity_check").fetchone()
+            tables = {row[0] for row in check.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            required = {"devices","playlists","device_playlists","settings","subscriptions","personal_playlists"}
+            if not integrity or integrity[0] != "ok" or not required.issubset(tables):
+                raise HTTPException(400, "النسخة غير سليمة أو لا تخص لوحة SEGA")
+        finally:
+            check.close()
+        with database() as db:
+            db.execute("PRAGMA wal_checkpoint(FULL)")
+        _sqlite_snapshot(safety_path)
+        os.replace(restore_path, DB_FILE)
+        for suffix in ("-wal", "-shm"):
+            sidecar = Path(str(DB_FILE) + suffix)
+            if sidecar.exists():
+                sidecar.unlink()
+        initialize()
+        with database() as db:
+            audit_event(db, "database.restored", "database", "main", {"uploaded_filename": Path(filename).name})
+        return {"restored": True, "safety_backup": safety_path.name}
+    finally:
+        if restore_path.exists():
+            restore_path.unlink()
+
+
 @APP.get("/admin/api/state")
 def admin_state(_: bool = Depends(admin_only)):
     with database() as db:
@@ -370,6 +496,9 @@ def set_activation(device_id: str, payload: ActivationInput, _: bool = Depends(a
             raise HTTPException(404, "Device not found")
         db.execute("""INSERT INTO subscriptions(device_id,trial_used,plan) VALUES(?,1,?)
             ON CONFLICT(device_id) DO UPDATE SET trial_used=1,plan=excluded.plan""", (device_id, payload.plan))
+        audit_event(db, "device.activation_updated", "device", device_id, {
+            "active": bool(payload.active), "plan": payload.plan, "expires_at": expiry, "label": payload.label
+        })
     return {"saved": True}
 
 
@@ -379,6 +508,7 @@ def create_playlist(payload: PlaylistInput, _: bool = Depends(admin_only)):
         cur = db.execute("INSERT INTO playlists(name,url,is_global,created_at) VALUES(?,?,?,?)", (
             payload.name.strip(), payload.url.strip(), int(payload.is_global), now_iso()))
         ident = cur.lastrowid
+        audit_event(db, "playlist.created", "playlist", ident, {"name": payload.name.strip(), "is_global": payload.is_global})
     return {"id": ident}
 
 
@@ -389,13 +519,17 @@ def edit_playlist(playlist_id: int, payload: PlaylistInput, _: bool = Depends(ad
             payload.name.strip(), payload.url.strip(), int(payload.is_global), playlist_id))
         if not cursor.rowcount:
             raise HTTPException(404, "Playlist not found")
+        audit_event(db, "playlist.updated", "playlist", playlist_id, {"name": payload.name.strip(), "is_global": payload.is_global})
     return {"saved": True}
 
 
 @APP.delete("/admin/api/playlists/{playlist_id}")
 def remove_playlist(playlist_id: int, _: bool = Depends(admin_only)):
     with database() as db:
+        current = db.execute("SELECT name FROM playlists WHERE id=?", (playlist_id,)).fetchone()
         db.execute("DELETE FROM playlists WHERE id=?", (playlist_id,))
+        if current:
+            audit_event(db, "playlist.deleted", "playlist", playlist_id, {"name": current["name"]})
     return {"deleted": True}
 
 
@@ -411,6 +545,7 @@ def set_assignments(device_id: str, payload: AssignmentInput, _: bool = Depends(
         db.execute("DELETE FROM device_playlists WHERE device_id=?", (device_id,))
         db.executemany("INSERT INTO device_playlists(device_id,playlist_id) VALUES(?,?)",
                        [(device_id, p) for p in set(payload.playlist_ids)])
+        audit_event(db, "device.playlists_updated", "device", device_id, {"playlist_ids": sorted(set(payload.playlist_ids))})
     return {"saved": True}
 
 
@@ -420,6 +555,7 @@ def set_theme(payload: ThemeInput, _: bool = Depends(admin_only)):
         db.execute("""UPDATE settings SET app_name=?,accent_color=?,background_url=?,logo_url=?
                       WHERE id=1""", (payload.app_name.strip(), payload.accent_color,
                                      payload.background_url.strip(), payload.logo_url.strip()))
+        audit_event(db, "settings.updated", "settings", "1", {"app_name": payload.app_name.strip(), "accent_color": payload.accent_color})
     return {"saved": True}
 
 
@@ -482,51 +618,106 @@ def portal_asset(file_name: str):
 @APP.get("/portal/api/account")
 def portal_account(device=Depends(portal_device)):
     with database() as db:
-        playlist = db.execute("SELECT name,url,(pin_hash IS NOT NULL) AS pin_set FROM personal_playlists WHERE device_id=?", (device["id"],)).fetchone()
+        playlists = [dict(row) for row in db.execute(
+            """SELECT id,name,url,(pin_hash IS NOT NULL) AS pin_set
+               FROM personal_playlists WHERE device_id=? ORDER BY id""", (device["id"],)
+        ).fetchall()]
         subscription = db.execute("SELECT plan FROM subscriptions WHERE device_id=?", (device["id"],)).fetchone()
     return {"active": enabled_device(device), "expires_at": device["expires_at"],
             "plan": subscription["plan"] if subscription else "existing",
-            "playlist": dict(playlist) if playlist else None}
+            "playlists": playlists, "playlist": playlists[0] if playlists else None}
 
 
-@APP.put("/portal/api/playlist")
-def portal_save(payload: PersonalPlaylistInput, device=Depends(portal_device)):
+def _playlist_pin_record(db, device_id, pin, require_existing=False):
+    records = db.execute(
+        "SELECT pin_salt,pin_hash FROM personal_playlists WHERE device_id=? AND pin_hash IS NOT NULL ORDER BY id",
+        (device_id,)
+    ).fetchall()
+    if records:
+        for record in records:
+            if valid_hash(pin, record["pin_salt"], record["pin_hash"]):
+                return record["pin_salt"], record["pin_hash"]
+        raise HTTPException(403, "Invalid playlist PIN")
+    if require_existing:
+        raise HTTPException(404, "Playlist not found")
+    return make_hash(pin)
+
+
+def _save_personal_playlist(device_id, payload, playlist_id=None):
     with database() as db:
         db.execute("BEGIN IMMEDIATE")
-        existing = db.execute("SELECT pin_salt,pin_hash FROM personal_playlists WHERE device_id=?",
-                              (device["id"],)).fetchone()
-        if existing and existing["pin_hash"] and not valid_hash(
-            payload.pin, existing["pin_salt"], existing["pin_hash"]
-        ):
-            raise HTTPException(403, "Invalid playlist PIN")
-        # A legacy playlist without a PIN gains one on its first authorized edit.
-        if existing and existing["pin_hash"]:
-            salt, digest = existing["pin_salt"], existing["pin_hash"]
+        if playlist_id is not None:
+            existing = db.execute(
+                "SELECT id FROM personal_playlists WHERE id=? AND device_id=?",
+                (playlist_id, device_id)
+            ).fetchone()
+            if not existing:
+                raise HTTPException(404, "Playlist not found")
+        salt, digest = _playlist_pin_record(db, device_id, payload.pin)
+        # Keep one PIN for all lists on the device and carry it forward from older records.
+        db.execute("UPDATE personal_playlists SET pin_salt=?,pin_hash=? WHERE device_id=?",
+                   (salt, digest, device_id))
+        if playlist_id is None:
+            cursor = db.execute(
+                "INSERT INTO personal_playlists(device_id,name,url,pin_salt,pin_hash) VALUES(?,?,?,?,?)",
+                (device_id, payload.name.strip(), payload.url.strip(), salt, digest)
+            )
+            playlist_id = cursor.lastrowid
         else:
-            salt, digest = make_hash(payload.pin)
-        db.execute("""INSERT INTO personal_playlists(device_id,name,url,pin_salt,pin_hash)
-            VALUES(?,?,?,?,?) ON CONFLICT(device_id) DO UPDATE SET
-            name=excluded.name,url=excluded.url,pin_salt=excluded.pin_salt,
-            pin_hash=excluded.pin_hash""",
-            (device["id"], payload.name.strip(), payload.url.strip(), salt, digest))
-    return {"saved": True}
+            db.execute(
+                "UPDATE personal_playlists SET name=?,url=?,pin_salt=?,pin_hash=? WHERE id=? AND device_id=?",
+                (payload.name.strip(), payload.url.strip(), salt, digest, playlist_id, device_id)
+            )
+    return {"saved": True, "id": playlist_id}
+
+
+@APP.post("/portal/api/playlists")
+def portal_create_playlist(payload: PersonalPlaylistInput, device=Depends(portal_device)):
+    return _save_personal_playlist(device["id"], payload)
+
+
+@APP.put("/portal/api/playlists/{playlist_id}")
+def portal_update_playlist(playlist_id: int, payload: PersonalPlaylistInput, device=Depends(portal_device)):
+    return _save_personal_playlist(device["id"], payload, playlist_id)
+
+
+@APP.delete("/portal/api/playlists/{playlist_id}")
+def portal_delete_playlist(playlist_id: int, payload: PlaylistPin, device=Depends(portal_device)):
+    with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        existing = db.execute(
+            "SELECT id FROM personal_playlists WHERE id=? AND device_id=?",
+            (playlist_id, device["id"])
+        ).fetchone()
+        if not existing:
+            raise HTTPException(404, "Playlist not found")
+        _playlist_pin_record(db, device["id"], payload.pin, require_existing=True)
+        db.execute("DELETE FROM personal_playlists WHERE id=? AND device_id=?",
+                   (playlist_id, device["id"]))
+    return {"deleted": True}
+
+
+# Backward-compatible endpoints for older portal clients: edit/delete the first list.
+@APP.put("/portal/api/playlist")
+def portal_save_legacy(payload: PersonalPlaylistInput, device=Depends(portal_device)):
+    with database() as db:
+        first = db.execute(
+            "SELECT id FROM personal_playlists WHERE device_id=? ORDER BY id LIMIT 1",
+            (device["id"],)
+        ).fetchone()
+    return _save_personal_playlist(device["id"], payload, first["id"] if first else None)
 
 
 @APP.delete("/portal/api/playlist")
-def portal_delete(payload: PlaylistPin, device=Depends(portal_device)):
+def portal_delete_legacy(payload: PlaylistPin, device=Depends(portal_device)):
     with database() as db:
-        db.execute("BEGIN IMMEDIATE")
-        existing = db.execute("SELECT pin_salt,pin_hash FROM personal_playlists WHERE device_id=?",
-                              (device["id"],)).fetchone()
-        if not existing:
-            raise HTTPException(404, "Playlist not found")
-        if not existing["pin_hash"]:
-            raise HTTPException(409, "Set a PIN by editing the legacy playlist first")
-        if not valid_hash(payload.pin, existing["pin_salt"], existing["pin_hash"]):
-            raise HTTPException(403, "Invalid playlist PIN")
-        db.execute("DELETE FROM personal_playlists WHERE device_id=?", (device["id"],))
-    return {"deleted": True}
-
+        first = db.execute(
+            "SELECT id FROM personal_playlists WHERE device_id=? ORDER BY id LIMIT 1",
+            (device["id"],)
+        ).fetchone()
+    if not first:
+        raise HTTPException(404, "Playlist not found")
+    return portal_delete_playlist(first["id"], payload, device)
 
 @APP.get("/api/v1/time")
 def server_time():

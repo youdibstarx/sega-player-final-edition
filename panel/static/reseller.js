@@ -2,6 +2,14 @@
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let authorization=null, pendingActivation=null;
+function formatMac(value){
+ const hex=String(value||'').replace(/[^0-9a-f]/gi,'').slice(0,12).toUpperCase();
+ return hex.match(/.{1,2}/g)?.join(':')||'';
+}
+document.querySelectorAll('input[name="mac"]').forEach(input=>{
+ input.addEventListener('input',()=>{const pos=input.selectionStart;const formatted=formatMac(input.value);input.value=formatted;try{const next=Math.min(formatted.length,formatMac(input.value.slice(0,pos)).length);input.setSelectionRange(next,next)}catch{}});
+ input.addEventListener('blur',()=>input.value=formatMac(input.value));
+});
 const message=text=>{$('#message').textContent=text;};
 function basic(email,password){
  const bytes=new TextEncoder().encode(email.trim().toLowerCase()+':'+password);
@@ -37,13 +45,13 @@ $('#login').onsubmit=e=>{e.preventDefault();busy(e.target,async()=>{
 });};
 $('#logout').onclick=()=>{authorization=null;pendingActivation=null;$('#account').hidden=true;$('#login').hidden=false;$('#mac-result').textContent='';message('');};
 $('#check').onsubmit=e=>{e.preventDefault();busy(e.target,async()=>{
- const mac=e.target.elements.mac.value.trim().toUpperCase();
+ const mac=formatMac(e.target.elements.mac.value);
  const data=await api('mac/'+encodeURIComponent(mac));
  $('#mac-result').textContent=data.active?'✅ الجهاز مفعّل'+(data.expires_at?' حتى '+data.expires_at:' مدى الحياة'):'الجهاز مسجّل لكنه غير مفعّل / انتهت صلاحيته';
  $('#activate').elements.mac.value=mac;message('');
 });};
 $('#activate').onsubmit=e=>{e.preventDefault();busy(e.target,async()=>{
- const mac=e.target.elements.mac.value.trim().toUpperCase(),plan=e.target.elements.plan.value;
+ const mac=formatMac(e.target.elements.mac.value),plan=e.target.elements.plan.value;
  if(!pendingActivation||pendingActivation.mac!==mac||pendingActivation.plan!==plan)
    pendingActivation={mac,plan,request_id:crypto.randomUUID()};
  if(!confirm('تأكيد تفعيل '+mac+' ('+planLabels[plan]+') وخصم النقاط من رصيدك؟'))return;
