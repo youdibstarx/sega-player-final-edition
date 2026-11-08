@@ -137,7 +137,7 @@ def initialize():
         );
         CREATE TABLE IF NOT EXISTS personal_playlists (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            device_id TEXT NOT NULL UNIQUE REFERENCES devices(id) ON DELETE CASCADE,
+            device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
             name TEXT NOT NULL,
             url TEXT NOT NULL
         );
@@ -151,6 +151,33 @@ def initialize():
             db.execute("ALTER TABLE personal_playlists ADD COLUMN pin_salt TEXT")
         if "pin_hash" not in columns:
             db.execute("ALTER TABLE personal_playlists ADD COLUMN pin_hash TEXT")
+        # Migrate the former one-playlist-per-device UNIQUE constraint in place.
+        # Preserve playlist IDs and the existing per-device PIN hashes.
+        unique_device_index = False
+        for index in db.execute("PRAGMA index_list(personal_playlists)").fetchall():
+            if index["unique"]:
+                index_name = index["name"].replace('"', '""')
+                indexed_columns = [r["name"] for r in db.execute(
+                    f'PRAGMA index_info("{index_name}")').fetchall()]
+                if indexed_columns == ["device_id"]:
+                    unique_device_index = True
+                    break
+        if unique_device_index:
+            db.execute("""
+                CREATE TABLE personal_playlists_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    pin_salt TEXT,
+                    pin_hash TEXT
+                )
+            """)
+            db.execute("""INSERT INTO personal_playlists_new(id,device_id,name,url,pin_salt,pin_hash)
+                SELECT id,device_id,name,url,pin_salt,pin_hash FROM personal_playlists""")
+            db.execute("DROP TABLE personal_playlists")
+            db.execute("ALTER TABLE personal_playlists_new RENAME TO personal_playlists")
+        db.execute("CREATE INDEX IF NOT EXISTS personal_playlists_device ON personal_playlists(device_id,id)")
     initialize_resellers(database)
 
 
@@ -482,51 +509,106 @@ def portal_asset(file_name: str):
 @APP.get("/portal/api/account")
 def portal_account(device=Depends(portal_device)):
     with database() as db:
-        playlist = db.execute("SELECT name,url,(pin_hash IS NOT NULL) AS pin_set FROM personal_playlists WHERE device_id=?", (device["id"],)).fetchone()
+        playlists = [dict(row) for row in db.execute(
+            """SELECT id,name,url,(pin_hash IS NOT NULL) AS pin_set
+               FROM personal_playlists WHERE device_id=? ORDER BY id""", (device["id"],)
+        ).fetchall()]
         subscription = db.execute("SELECT plan FROM subscriptions WHERE device_id=?", (device["id"],)).fetchone()
     return {"active": enabled_device(device), "expires_at": device["expires_at"],
             "plan": subscription["plan"] if subscription else "existing",
-            "playlist": dict(playlist) if playlist else None}
+            "playlists": playlists, "playlist": playlists[0] if playlists else None}
 
 
-@APP.put("/portal/api/playlist")
-def portal_save(payload: PersonalPlaylistInput, device=Depends(portal_device)):
+def _playlist_pin_record(db, device_id, pin, require_existing=False):
+    records = db.execute(
+        "SELECT pin_salt,pin_hash FROM personal_playlists WHERE device_id=? AND pin_hash IS NOT NULL ORDER BY id",
+        (device_id,)
+    ).fetchall()
+    if records:
+        for record in records:
+            if valid_hash(pin, record["pin_salt"], record["pin_hash"]):
+                return record["pin_salt"], record["pin_hash"]
+        raise HTTPException(403, "Invalid playlist PIN")
+    if require_existing:
+        raise HTTPException(404, "Playlist not found")
+    return make_hash(pin)
+
+
+def _save_personal_playlist(device_id, payload, playlist_id=None):
     with database() as db:
         db.execute("BEGIN IMMEDIATE")
-        existing = db.execute("SELECT pin_salt,pin_hash FROM personal_playlists WHERE device_id=?",
-                              (device["id"],)).fetchone()
-        if existing and existing["pin_hash"] and not valid_hash(
-            payload.pin, existing["pin_salt"], existing["pin_hash"]
-        ):
-            raise HTTPException(403, "Invalid playlist PIN")
-        # A legacy playlist without a PIN gains one on its first authorized edit.
-        if existing and existing["pin_hash"]:
-            salt, digest = existing["pin_salt"], existing["pin_hash"]
+        if playlist_id is not None:
+            existing = db.execute(
+                "SELECT id FROM personal_playlists WHERE id=? AND device_id=?",
+                (playlist_id, device_id)
+            ).fetchone()
+            if not existing:
+                raise HTTPException(404, "Playlist not found")
+        salt, digest = _playlist_pin_record(db, device_id, payload.pin)
+        # Keep one PIN for all lists on the device and carry it forward from older records.
+        db.execute("UPDATE personal_playlists SET pin_salt=?,pin_hash=? WHERE device_id=?",
+                   (salt, digest, device_id))
+        if playlist_id is None:
+            cursor = db.execute(
+                "INSERT INTO personal_playlists(device_id,name,url,pin_salt,pin_hash) VALUES(?,?,?,?,?)",
+                (device_id, payload.name.strip(), payload.url.strip(), salt, digest)
+            )
+            playlist_id = cursor.lastrowid
         else:
-            salt, digest = make_hash(payload.pin)
-        db.execute("""INSERT INTO personal_playlists(device_id,name,url,pin_salt,pin_hash)
-            VALUES(?,?,?,?,?) ON CONFLICT(device_id) DO UPDATE SET
-            name=excluded.name,url=excluded.url,pin_salt=excluded.pin_salt,
-            pin_hash=excluded.pin_hash""",
-            (device["id"], payload.name.strip(), payload.url.strip(), salt, digest))
-    return {"saved": True}
+            db.execute(
+                "UPDATE personal_playlists SET name=?,url=?,pin_salt=?,pin_hash=? WHERE id=? AND device_id=?",
+                (payload.name.strip(), payload.url.strip(), salt, digest, playlist_id, device_id)
+            )
+    return {"saved": True, "id": playlist_id}
+
+
+@APP.post("/portal/api/playlists")
+def portal_create_playlist(payload: PersonalPlaylistInput, device=Depends(portal_device)):
+    return _save_personal_playlist(device["id"], payload)
+
+
+@APP.put("/portal/api/playlists/{playlist_id}")
+def portal_update_playlist(playlist_id: int, payload: PersonalPlaylistInput, device=Depends(portal_device)):
+    return _save_personal_playlist(device["id"], payload, playlist_id)
+
+
+@APP.delete("/portal/api/playlists/{playlist_id}")
+def portal_delete_playlist(playlist_id: int, payload: PlaylistPin, device=Depends(portal_device)):
+    with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        existing = db.execute(
+            "SELECT id FROM personal_playlists WHERE id=? AND device_id=?",
+            (playlist_id, device["id"])
+        ).fetchone()
+        if not existing:
+            raise HTTPException(404, "Playlist not found")
+        _playlist_pin_record(db, device["id"], payload.pin, require_existing=True)
+        db.execute("DELETE FROM personal_playlists WHERE id=? AND device_id=?",
+                   (playlist_id, device["id"]))
+    return {"deleted": True}
+
+
+# Backward-compatible endpoints for older portal clients: edit/delete the first list.
+@APP.put("/portal/api/playlist")
+def portal_save_legacy(payload: PersonalPlaylistInput, device=Depends(portal_device)):
+    with database() as db:
+        first = db.execute(
+            "SELECT id FROM personal_playlists WHERE device_id=? ORDER BY id LIMIT 1",
+            (device["id"],)
+        ).fetchone()
+    return _save_personal_playlist(device["id"], payload, first["id"] if first else None)
 
 
 @APP.delete("/portal/api/playlist")
-def portal_delete(payload: PlaylistPin, device=Depends(portal_device)):
+def portal_delete_legacy(payload: PlaylistPin, device=Depends(portal_device)):
     with database() as db:
-        db.execute("BEGIN IMMEDIATE")
-        existing = db.execute("SELECT pin_salt,pin_hash FROM personal_playlists WHERE device_id=?",
-                              (device["id"],)).fetchone()
-        if not existing:
-            raise HTTPException(404, "Playlist not found")
-        if not existing["pin_hash"]:
-            raise HTTPException(409, "Set a PIN by editing the legacy playlist first")
-        if not valid_hash(payload.pin, existing["pin_salt"], existing["pin_hash"]):
-            raise HTTPException(403, "Invalid playlist PIN")
-        db.execute("DELETE FROM personal_playlists WHERE device_id=?", (device["id"],))
-    return {"deleted": True}
-
+        first = db.execute(
+            "SELECT id FROM personal_playlists WHERE device_id=? ORDER BY id LIMIT 1",
+            (device["id"],)
+        ).fetchone()
+    if not first:
+        raise HTTPException(404, "Playlist not found")
+    return portal_delete_playlist(first["id"], payload, device)
 
 @APP.get("/api/v1/time")
 def server_time():
