@@ -44,7 +44,7 @@ internal object DeviceProof {
         val nonce = UUID.randomUUID().toString()
         val key = ks.getKey(ALIAS, null) as PrivateKey
         return mapOf("X-Proof-Time" to time, "X-Proof-Nonce" to nonce,
-            "X-Proof-Public-Key" to Base64.getEncoder().encodeToString(ks.getCertificate(ALIAS).publicKey.encoded),
+            "X-Proof-Public-Key" to Base64.encodeToString(ks.getCertificate(ALIAS).publicKey.encoded, Base64.NO_WRAP),
             "X-Proof-Signature" to sign(key, canonical(id, method, path, body.orEmpty(), time, nonce)))
     }
 }
