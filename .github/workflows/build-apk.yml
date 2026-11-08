@@ -47,7 +47,7 @@ jobs:
           APK=android/app/build/outputs/apk/hardened/app-hardened-unsigned.apk
           test "$(apkanalyzer manifest debuggable "$APK")" = "false"
           test "$(apkanalyzer manifest application-id "$APK")" = "com.segaiptv.player.v3.secure"
-          test "$(apkanalyzer manifest version-code "$APK")" = "35"
+          test "$(apkanalyzer manifest version-code "$APK")" = "36"
       - name: Sign only with the persistent owner certificate
         id: signing
         env:
