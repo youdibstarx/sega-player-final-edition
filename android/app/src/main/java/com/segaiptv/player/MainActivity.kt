@@ -247,8 +247,15 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
             loading = false
             channelsLoading = false
             message = when (ex) {
-                is BackendHttpError -> "تعذر الاتصال بالخادم. حاول التحديث من جديد. (HTTP ${ex.statusCode})"
-                is BackendAccessDenied -> "تعذر الاتصال بالخادم. حاول التحديث من جديد. (401/403)"
+                is BackendHttpError -> "الخادم ردّ برمز HTTP ${ex.statusCode}."
+                is BackendAccessDenied -> "الخادم رفض مفتاح الجهاز (401/403)."
+                is BackendTransportFailure -> when (ex.reason) {
+                    BackendTransportFailure.Reason.DNS -> "تعذر حلّ عنوان الخادم (DNS) على هذا الجهاز."
+                    BackendTransportFailure.Reason.TLS -> "تعذر التحقق من شهادة HTTPS على هذا الجهاز."
+                    BackendTransportFailure.Reason.TIMEOUT -> "انتهت مهلة الاتصال بالخادم."
+                    BackendTransportFailure.Reason.CONNECTION -> "تعذر فتح اتصال بالخادم."
+                    BackendTransportFailure.Reason.UNKNOWN -> "فشل الاتصال قبل وصول ردّ من الخادم."
+                }
                 else -> "تعذر الاتصال بالخادم. حاول التحديث من جديد."
             }
         }
