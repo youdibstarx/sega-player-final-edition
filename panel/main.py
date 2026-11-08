@@ -1,17 +1,21 @@
 """SEGA IPTV Player control panel + device API. Uses only authorized M3U media sources."""
 import calendar
 import hashlib
+import io
+import json
 import hmac
 import os
 import re
 import sqlite3
+import os
+import tempfile
 from contextlib import contextmanager
 from datetime import date, datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.concurrency import run_in_threadpool
 from security import RateLimiter
@@ -141,6 +145,16 @@ def initialize():
             name TEXT NOT NULL,
             url TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            actor TEXT NOT NULL DEFAULT 'admin',
+            object_type TEXT NOT NULL,
+            object_id TEXT NOT NULL DEFAULT '',
+            details TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS audit_log_created ON audit_log(created_at DESC);
         CREATE INDEX IF NOT EXISTS devices_mac_lookup ON devices(mac_alias);
         INSERT OR IGNORE INTO subscriptions(device_id) SELECT id FROM devices;
         INSERT OR IGNORE INTO settings VALUES
@@ -182,6 +196,13 @@ def initialize():
 
 
 initialize()
+
+
+def audit_event(db, action: str, object_type: str, object_id: str = "", details=None, actor: str = "admin"):
+    db.execute(
+        "INSERT INTO audit_log(action,actor,object_type,object_id,details,created_at) VALUES(?,?,?,?,?,?)",
+        (action, actor, object_type, str(object_id), json.dumps(details or {}, ensure_ascii=False), now_iso())
+    )
 
 
 def admin_only(request: Request, credentials: HTTPBasicCredentials = Depends(security)):
@@ -369,6 +390,84 @@ def admin_asset(file_name: str, _: bool = Depends(admin_only)):
     return FileResponse(BASE / "static" / file_name)
 
 
+
+@APP.get("/admin/api/audit")
+def admin_audit(_: bool = Depends(admin_only)):
+    with database() as db:
+        rows = [dict(row) for row in db.execute(
+            "SELECT id,action,actor,object_type,object_id,details,created_at FROM audit_log ORDER BY id DESC LIMIT 500"
+        ).fetchall()]
+    for row in rows:
+        try:
+            row["details"] = json.loads(row["details"])
+        except (TypeError, json.JSONDecodeError):
+            row["details"] = {}
+    return {"events": rows}
+
+
+def _sqlite_snapshot(target: Path):
+    source = sqlite3.connect(str(DB_FILE), timeout=10)
+    destination = sqlite3.connect(str(target), timeout=10)
+    try:
+        source.backup(destination)
+    finally:
+        destination.close()
+        source.close()
+
+
+@APP.get("/admin/api/backup")
+def download_backup(_: bool = Depends(admin_only)):
+    with database() as db:
+        db.execute("PRAGMA wal_checkpoint(FULL)")
+    with tempfile.NamedTemporaryFile(suffix=".sqlite") as temporary:
+        _sqlite_snapshot(Path(temporary.name))
+        temporary.seek(0)
+        data = temporary.read()
+    filename = "segaiptv-backup-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S") + ".sqlite"
+    return StreamingResponse(io.BytesIO(data), media_type="application/vnd.sqlite3",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@APP.post("/admin/api/restore")
+async def restore_backup(request: Request, _: bool = Depends(admin_only)):
+    filename = request.headers.get("X-Backup-Filename", "")
+    if not filename.lower().endswith((".sqlite", ".db")):
+        raise HTTPException(400, "اختر ملف SQLite بامتداد .sqlite أو .db")
+    raw = await request.body()
+    if len(raw) > 200 * 1024 * 1024:
+        raise HTTPException(413, "حجم النسخة الاحتياطية يتجاوز 200 ميغابايت")
+    descriptor, path = tempfile.mkstemp(prefix="sega-restore-", suffix=".sqlite", dir=str(DB_FILE.parent))
+    os.close(descriptor)
+    restore_path = Path(path)
+    safety_path = DB_FILE.parent / ("segaiptv-before-restore-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S") + ".sqlite")
+    try:
+        restore_path.write_bytes(raw)
+        check = sqlite3.connect(f"file:{restore_path}?mode=ro", uri=True)
+        try:
+            integrity = check.execute("PRAGMA integrity_check").fetchone()
+            tables = {row[0] for row in check.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            required = {"devices","playlists","device_playlists","settings","subscriptions","personal_playlists"}
+            if not integrity or integrity[0] != "ok" or not required.issubset(tables):
+                raise HTTPException(400, "النسخة غير سليمة أو لا تخص لوحة SEGA")
+        finally:
+            check.close()
+        with database() as db:
+            db.execute("PRAGMA wal_checkpoint(FULL)")
+        _sqlite_snapshot(safety_path)
+        os.replace(restore_path, DB_FILE)
+        for suffix in ("-wal", "-shm"):
+            sidecar = Path(str(DB_FILE) + suffix)
+            if sidecar.exists():
+                sidecar.unlink()
+        initialize()
+        with database() as db:
+            audit_event(db, "database.restored", "database", "main", {"uploaded_filename": Path(filename).name})
+        return {"restored": True, "safety_backup": safety_path.name}
+    finally:
+        if restore_path.exists():
+            restore_path.unlink()
+
+
 @APP.get("/admin/api/state")
 def admin_state(_: bool = Depends(admin_only)):
     with database() as db:
@@ -397,6 +496,9 @@ def set_activation(device_id: str, payload: ActivationInput, _: bool = Depends(a
             raise HTTPException(404, "Device not found")
         db.execute("""INSERT INTO subscriptions(device_id,trial_used,plan) VALUES(?,1,?)
             ON CONFLICT(device_id) DO UPDATE SET trial_used=1,plan=excluded.plan""", (device_id, payload.plan))
+        audit_event(db, "device.activation_updated", "device", device_id, {
+            "active": bool(payload.active), "plan": payload.plan, "expires_at": expiry, "label": payload.label
+        })
     return {"saved": True}
 
 
@@ -406,6 +508,7 @@ def create_playlist(payload: PlaylistInput, _: bool = Depends(admin_only)):
         cur = db.execute("INSERT INTO playlists(name,url,is_global,created_at) VALUES(?,?,?,?)", (
             payload.name.strip(), payload.url.strip(), int(payload.is_global), now_iso()))
         ident = cur.lastrowid
+        audit_event(db, "playlist.created", "playlist", ident, {"name": payload.name.strip(), "is_global": payload.is_global})
     return {"id": ident}
 
 
@@ -416,13 +519,17 @@ def edit_playlist(playlist_id: int, payload: PlaylistInput, _: bool = Depends(ad
             payload.name.strip(), payload.url.strip(), int(payload.is_global), playlist_id))
         if not cursor.rowcount:
             raise HTTPException(404, "Playlist not found")
+        audit_event(db, "playlist.updated", "playlist", playlist_id, {"name": payload.name.strip(), "is_global": payload.is_global})
     return {"saved": True}
 
 
 @APP.delete("/admin/api/playlists/{playlist_id}")
 def remove_playlist(playlist_id: int, _: bool = Depends(admin_only)):
     with database() as db:
+        current = db.execute("SELECT name FROM playlists WHERE id=?", (playlist_id,)).fetchone()
         db.execute("DELETE FROM playlists WHERE id=?", (playlist_id,))
+        if current:
+            audit_event(db, "playlist.deleted", "playlist", playlist_id, {"name": current["name"]})
     return {"deleted": True}
 
 
@@ -438,6 +545,7 @@ def set_assignments(device_id: str, payload: AssignmentInput, _: bool = Depends(
         db.execute("DELETE FROM device_playlists WHERE device_id=?", (device_id,))
         db.executemany("INSERT INTO device_playlists(device_id,playlist_id) VALUES(?,?)",
                        [(device_id, p) for p in set(payload.playlist_ids)])
+        audit_event(db, "device.playlists_updated", "device", device_id, {"playlist_ids": sorted(set(payload.playlist_ids))})
     return {"saved": True}
 
 
@@ -447,6 +555,7 @@ def set_theme(payload: ThemeInput, _: bool = Depends(admin_only)):
         db.execute("""UPDATE settings SET app_name=?,accent_color=?,background_url=?,logo_url=?
                       WHERE id=1""", (payload.app_name.strip(), payload.accent_color,
                                      payload.background_url.strip(), payload.logo_url.strip()))
+        audit_event(db, "settings.updated", "settings", "1", {"app_name": payload.app_name.strip(), "accent_color": payload.accent_color})
     return {"saved": True}
 
 
