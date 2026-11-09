@@ -47,6 +47,6 @@ internal fun buildVodTitles(entries: List<Channel>, series: Boolean): List<VodTi
         .values.map { episodes -> VodTitle(episodeLabel(episodes.first()).title,
             episodes.map { it to episodeLabel(it) }
                 .sortedWith(compareBy({ it.second.season ?: 0 }, { it.second.episode ?: 0 }))
-                .map { it.first })) }
+                .map { it.first }) }
 }
 
