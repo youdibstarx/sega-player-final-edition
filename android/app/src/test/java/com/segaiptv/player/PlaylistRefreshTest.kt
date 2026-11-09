@@ -78,4 +78,22 @@ class PlaylistRefreshTest {
             assertTrue(result.warnings.isNotEmpty())
         }
     }
+    @Test fun parserPublishesRowsSinceLastThrottledUpdateBeforeReadFailure() {
+        var last = emptyList<Channel>()
+        val lines = sequence {
+            yield("#EXTM3U")
+            for (i in 1..55) {
+                yield("#EXTINF:-1,Channel $i")
+                yield("https://provider.test/live/$i.ts")
+            }
+            throw IOException("Read interrupted")
+        }
+        try {
+            M3uParser.parseLines(lines, "P", "", onPartial = { last = it })
+            fail("Read failure must remain visible")
+        } catch (_: IOException) {
+            assertEquals(55, last.size)
+            assertEquals("Channel 55", last.last().name)
+        }
+    }
 }
