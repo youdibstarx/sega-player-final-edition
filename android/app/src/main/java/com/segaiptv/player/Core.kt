@@ -266,13 +266,14 @@ object M3uParser {
             if (channels.size > MAX_CHANNELS_PER_PLAYLIST) error("Playlist too large")
             val now = System.nanoTime()
             if (channels.size > published && (published == 0 && channels.size >= 30 ||
-                    channels.size - published >= 250 && now - lastPublish >= 250_000_000L)) {
+                    channels.size - published >= 1000 && now - lastPublish >= 1_000_000_000L)) {
                 onPartial(channels.toList()); published = channels.size; lastPublish = now
             }
         }
         return channels
     }
 }
+
 
 
 

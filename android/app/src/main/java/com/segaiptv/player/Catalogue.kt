@@ -3,22 +3,23 @@ package com.segaiptv.player
 import java.net.URI
 import java.util.Locale
 
-internal fun isVodEntry(item: Channel, series: Boolean): Boolean {
+private val videoExtension = Regex("""\.(mp4|mkv|avi|m4v|mov)$""")
+internal fun catalogueKind(item: Channel): String {
+    when (item.mediaType.lowercase(Locale.ROOT)) {
+        "live" -> return "live"
+        "series", "episode" -> return "series"
+        "movie", "vod" -> return "vod"
+    }
     val path = runCatching { URI(item.url).path.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
-    val type = item.mediaType.lowercase(Locale.ROOT)
-    // Category names are display metadata, never proof of media type (Serie A, Cinema TV, etc.).
-    if (type == "live") return false
-    if (type in setOf("series", "episode")) return series
-    if (type in setOf("movie", "vod")) return !series
-    if (path.contains("/live/")) return false
-    if (path.contains("/series/")) return series
-    if (path.contains("/movie/")) return if (episodeLabel(item).episode != null) series else !series
-    val videoFile = Regex("""\.(mp4|mkv|avi|m4v|mov)$""").containsMatchIn(path)
-    val structuredEpisode = item.seriesTitle.isNotBlank() || item.episode != null
-    if (structuredEpisode) return series
-    // Name patterns only refine an already identified video file, never a live TS/HLS entry.
-    return videoFile && (series == (episodeLabel(item).episode != null))
+    if (path.contains("/live/")) return "live"
+    if (path.contains("/series/")) return "series"
+    if (path.contains("/movie/")) return if (episodeLabel(item).episode != null) "series" else "vod"
+    if (item.seriesTitle.isNotBlank() || item.episode != null) return "series"
+    if (!videoExtension.containsMatchIn(path)) return "live"
+    return if (episodeLabel(item).episode != null) "series" else "vod"
 }
+internal fun isVodEntry(item: Channel, series: Boolean): Boolean =
+    catalogueKind(item) == if (series) "series" else "vod"
 
 internal data class EpisodeLabel(val title: String, val season: Int?, val episode: Int?)
 private val episodePatterns = listOf(
@@ -44,5 +45,8 @@ internal fun buildVodTitles(entries: List<Channel>, series: Boolean): List<VodTi
     if (!series) return catalogue.map { VodTitle(it.name, listOf(it)) }
     return catalogue.groupBy { Triple(it.playlist, it.category, it.seriesId.ifBlank { episodeLabel(it).title.lowercase(Locale.ROOT) }) }
         .values.map { episodes -> VodTitle(episodeLabel(episodes.first()).title,
-            episodes.sortedWith(compareBy({ episodeLabel(it).season ?: 0 }, { episodeLabel(it).episode ?: 0 }))) }
+            episodes.map { it to episodeLabel(it) }
+                .sortedWith(compareBy({ it.second.season ?: 0 }, { it.second.episode ?: 0 }))
+                .map { it.first })) }
 }
+

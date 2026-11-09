@@ -113,9 +113,9 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
     var channelsLoading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var playlistErrors by remember { mutableStateOf("") }
-    var remoteChannels by remember { mutableStateOf<List<Channel>>(emptyList()) }
-    var selectedChannels by remember { mutableStateOf<List<Channel>>(emptyList()) }
-    var localChannels by remember { mutableStateOf<List<Channel>>(emptyList()) }
+    var remoteChannels by remember { mutableStateOf<List<Channel>>(emptyList(), referentialEqualityPolicy()) }
+    var selectedChannels by remember { mutableStateOf<List<Channel>>(emptyList(), referentialEqualityPolicy()) }
+    var localChannels by remember { mutableStateOf<List<Channel>>(emptyList(), referentialEqualityPolicy()) }
     var verifiedAt by remember { mutableStateOf<Long?>(null) }
     var refreshToken by remember { mutableIntStateOf(0) }
     var activationToken by remember { mutableIntStateOf(0) }
@@ -127,7 +127,7 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
     val categoryMemory = remember { CategoryMemory() }
     var favorites by remember { mutableStateOf(identity.readFavorites()) }
     val color = appTheme.accent
-    val allChannels = remember(remoteChannels, localChannels, selectedChannels) { (remoteChannels + localChannels + selectedChannels).distinctBy { it.url } }
+    val allChannels = rememberCatalogueWork<List<Channel>>(emptyList(), remoteChannels, localChannels, selectedChannels) { (remoteChannels + localChannels + selectedChannels).distinctBy { it.url } }
     val isTv = remember(context) {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
             (context.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager)
@@ -187,29 +187,32 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
                 playlistErrors = ""
                 selectedChannels = FavoriteCatalogue.read(context, favorites, freshConfig.playlists)
                 // Reuse loaded objects on manual refresh instead of deserializing a second library.
-                val existing = remoteChannels.groupBy { it.sourceUrl }
+                val existing = withContext(kotlinx.coroutines.Dispatchers.Default) { remoteChannels.groupBy { it.sourceUrl } }
                 val cached = mutableMapOf<Int, List<Channel>>()
                 for (playlist in freshConfig.playlists.take(30)) {
                     cached[playlist.id] = existing[playlist.url] ?: LibraryCache.read(context, playlist)
                 }
-                remoteChannels = cached.values.flatten()
+                remoteChannels = withContext(kotlinx.coroutines.Dispatchers.Default) { cached.values.flatten() }
                 LibraryCache.prune(context, freshConfig.playlists)
                 val loaded = mutableListOf<Channel>()
                 val failed = mutableListOf<String>()
                 for (playlist in freshConfig.playlists.take(30)) {
                     try {
                         val fresh = Api.downloadPlaylistProgressive(playlist) { partial ->
-                            withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                remoteChannels = loaded.toList() + partial
+                            val prefix = loaded.toList()
+                            val pending = cached.filterKeys { it != playlist.id }.values.toList()
+                            remoteChannels = withContext(kotlinx.coroutines.Dispatchers.Default) {
+                                prefix + partial + pending.flatten()
                             }
                         }
-                        val result = mergeCachedCatalogue(fresh, cached.remove(playlist.id).orEmpty())
+                        val previous = cached.remove(playlist.id).orEmpty()
+                        val result = withContext(kotlinx.coroutines.Dispatchers.Default) { mergeCachedCatalogue(fresh, previous) }
                         loaded += result.entries
                         if (fresh.warnings.isEmpty() || fresh.entries.isNotEmpty())
                             LibraryCache.write(context, playlist, result.entries)
                         failed += result.warnings.map { "${playlist.name}: $it" }
                         val pendingIds = freshConfig.playlists.take(30).dropWhile { it.id != playlist.id }.drop(1).map { it.id }
-                        remoteChannels = loaded + pendingIds.flatMap { cached[it].orEmpty() }
+                        remoteChannels = withContext(kotlinx.coroutines.Dispatchers.Default) { loaded + pendingIds.flatMap { cached[it].orEmpty() } }
 
                     }
                     catch (ex: Exception) {
@@ -762,6 +765,7 @@ private fun VideoScreen(channel: Channel, accent: Color, onBack: () -> Unit,
     isFavorite: Boolean, onFavorite: () -> Unit) {
     PlaybackScreen(channel, accent, onBack, isFavorite, onFavorite)
 }
+
 
 
 

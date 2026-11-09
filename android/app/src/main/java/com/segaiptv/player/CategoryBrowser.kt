@@ -51,12 +51,8 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
     var entriesError by remember(selectedKey, providers, refreshToken) { mutableStateOf(false) }
     val loadedCallback by rememberUpdatedState(onLoaded)
     // Plain/local M3U must be parsed first; exclude Xtream rows from the on-demand selection.
-    val localGroups = remember(channels, kind, m3uOnly) {
-        channels.filter { (m3uOnly || XtreamSource.from(it.sourceUrl) == null) && when (kind) {
-            "vod" -> isVodEntry(it, false)
-            "series" -> isVodEntry(it, true)
-            else -> !isVodEntry(it, false) && !isVodEntry(it, true)
-        } }.groupBy { it.category.ifBlank { "Other" } }
+    val localGroups = rememberCatalogueWork<Map<String, List<Channel>>>(emptyMap(), channels, kind, m3uOnly) {
+        localCatalogueGroups(channels, kind, m3uOnly)
     }
     val selected = categories.firstOrNull { it.key == selectedKey }
     val localName = selectedKey?.takeIf { it.startsWith("local:") }?.removePrefix("local:")
@@ -157,5 +153,6 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
         }
     }
 }
+
 
 
