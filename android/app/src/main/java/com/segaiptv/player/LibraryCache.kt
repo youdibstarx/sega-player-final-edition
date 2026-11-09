@@ -18,7 +18,8 @@ internal object LibraryCache {
         val coroutine = currentCoroutineContext()
         try {
             val f = file(context, playlist)
-            if (!f.exists() || f.length() > 80L * 1024 * 1024 || System.currentTimeMillis() - f.lastModified() > 14L * 86400_000)
+            // Keep the last snapshot until an explicit refresh or source removal.
+            if (!f.exists() || f.length() > 80L * 1024 * 1024)
                 return@withContext emptyList()
             AtomicFile(f).openRead().bufferedReader().use { reader ->
                 val categories = mutableMapOf<String, String>()
@@ -83,3 +84,4 @@ internal fun mergeCachedCatalogue(fresh: PlaylistLoad, cached: List<Channel>): P
     } + "saved catalogue; refresh unavailable"
     return PlaylistLoad((fresh.entries + recovered).distinctBy { it.url }, warnings)
 }
+

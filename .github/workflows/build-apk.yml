@@ -47,7 +47,7 @@ jobs:
           APK=android/app/build/outputs/apk/hardened/app-hardened-unsigned.apk
           test "$(apkanalyzer manifest debuggable "$APK")" = "false"
           test "$(apkanalyzer manifest application-id "$APK")" = "com.segaiptv.player.v3.secure"
-          test "$(apkanalyzer manifest version-code "$APK")" = "39"
+          test "$(apkanalyzer manifest version-code "$APK")" = "40"
       - name: Sign only with the persistent owner certificate
         id: signing
         env:
@@ -58,7 +58,7 @@ jobs:
           mkdir -p dist
           APK=android/app/build/outputs/apk/hardened/app-hardened-unsigned.apk
           if [ -z "$KEYSTORE_BASE64" ] && [ -z "$KEYSTORE_PASSWORD" ]; then
-            cp "$APK" dist/SEGA_PLAYER_V3_0.5.21_UNSIGNED.apk
+            cp "$APK" dist/SEGA_PLAYER_V3_0.5.22_UNSIGNED.apk
             echo "artifact=SEGA-PLAYER-V3-secure-UNSIGNED" >> "$GITHUB_OUTPUT"
             echo "Signing secrets are absent. Artifact is unsigned and cannot be installed." >> "$GITHUB_STEP_SUMMARY"
             exit 0
@@ -69,8 +69,8 @@ jobs:
           KEYSTORE="$RUNNER_TEMP/sega-v3-secure.p12"
           trap 'rm -f "$KEYSTORE"' EXIT
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks "$KEYSTORE" --ks-key-alias sega-v3-secure --ks-pass env:KEYSTORE_PASSWORD --out dist/SEGA_PLAYER_V3_0.5.21.apk "$APK"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs dist/SEGA_PLAYER_V3_0.5.21.apk > dist/signing-certificate.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks "$KEYSTORE" --ks-key-alias sega-v3-secure --ks-pass env:KEYSTORE_PASSWORD --out dist/SEGA_PLAYER_V3_0.5.22.apk "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs dist/SEGA_PLAYER_V3_0.5.22.apk > dist/signing-certificate.txt
           grep -Fq 'Signer #1 certificate SHA-256 digest: d25ec500c54c69192ed12bd160ea87ecfbed146fb8ba728cac2b9a95397263b4' dist/signing-certificate.txt
           echo "artifact=SEGA-PLAYER-V3-secure-APK" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4

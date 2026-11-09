@@ -8,8 +8,11 @@ import kotlinx.coroutines.withContext
 internal suspend fun refreshVisiblePlaylist(
     cached: List<Channel>,
     download: suspend (suspend (List<Channel>) -> Unit) -> PlaylistLoad,
-    onPartial: suspend (List<Channel>) -> Unit
+    onPartial: suspend (List<Channel>) -> Unit,
+    forceRefresh: Boolean = true
 ): PlaylistLoad {
+    // Activation is checked separately; a saved catalogue never grants access.
+    if (!forceRefresh && cached.isNotEmpty()) return PlaylistLoad(cached)
     var partial = emptyList<Channel>()
     val fresh = try {
         download { rows ->

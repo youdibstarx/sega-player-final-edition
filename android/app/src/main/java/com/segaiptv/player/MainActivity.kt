@@ -196,8 +196,11 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
                 LibraryCache.prune(context, freshConfig.playlists)
                 val loaded = mutableListOf<Channel>()
                 val failed = mutableListOf<String>()
+                val forceRefresh = refreshToken > 0 && refreshToken != catalogueToken
                 for (playlist in freshConfig.playlists.take(30)) {
-                    val result = refreshVisiblePlaylist(cached[playlist.id].orEmpty(),
+                    val saved = cached[playlist.id].orEmpty()
+                    val needsDownload = forceRefresh || saved.isEmpty()
+                    val result = refreshVisiblePlaylist(saved,
                         download = { publish -> Api.downloadPlaylistProgressive(playlist, publish) },
                         onPartial = { partial ->
                             val prefix = loaded.toList()
@@ -205,10 +208,10 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
                             remoteChannels = withContext(kotlinx.coroutines.Dispatchers.Default) {
                                 prefix + partial + pending.flatten()
                             }
-                        })
+                        }, forceRefresh = forceRefresh)
                     loaded += result.entries
                     // Never overwrite the last complete disk snapshot with a failed prefix.
-                    if (result.warnings.isEmpty()) LibraryCache.write(context, playlist, result.entries)
+                    if (needsDownload && result.warnings.isEmpty()) LibraryCache.write(context, playlist, result.entries)
                     cached.remove(playlist.id)
                     failed += result.warnings.map { "${playlist.name}: $it" }
                     val prefix = loaded.toList()
