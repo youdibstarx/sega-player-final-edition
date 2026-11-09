@@ -197,32 +197,25 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
                 val loaded = mutableListOf<Channel>()
                 val failed = mutableListOf<String>()
                 for (playlist in freshConfig.playlists.take(30)) {
-                    try {
-                        val fresh = Api.downloadPlaylistProgressive(playlist) { partial ->
+                    val result = refreshVisiblePlaylist(cached[playlist.id].orEmpty(),
+                        download = { publish -> Api.downloadPlaylistProgressive(playlist, publish) },
+                        onPartial = { partial ->
                             val prefix = loaded.toList()
                             val pending = cached.filterKeys { it != playlist.id }.values.toList()
                             remoteChannels = withContext(kotlinx.coroutines.Dispatchers.Default) {
                                 prefix + partial + pending.flatten()
                             }
-                        }
-                        val previous = cached.remove(playlist.id).orEmpty()
-                        val result = withContext(kotlinx.coroutines.Dispatchers.Default) { mergeCachedCatalogue(fresh, previous) }
-                        loaded += result.entries
-                        if (fresh.warnings.isEmpty() || fresh.entries.isNotEmpty())
-                            LibraryCache.write(context, playlist, result.entries)
-                        failed += result.warnings.map { "${playlist.name}: $it" }
-                        val pendingIds = freshConfig.playlists.take(30).dropWhile { it.id != playlist.id }.drop(1).map { it.id }
-                        remoteChannels = withContext(kotlinx.coroutines.Dispatchers.Default) { loaded + pendingIds.flatMap { cached[it].orEmpty() } }
-
-                    }
-                    catch (ex: Exception) {
-                        if (ex is CancellationException) throw ex
-                        loaded += cached[playlist.id].orEmpty()
-                        failed += "${playlist.name}: " + (if (cached[playlist.id].orEmpty().isNotEmpty())
-                            "saved catalogue; refresh unavailable" else "download unavailable")
-                    }
+                        })
+                    loaded += result.entries
+                    // Never overwrite the last complete disk snapshot with a failed prefix.
+                    if (result.warnings.isEmpty()) LibraryCache.write(context, playlist, result.entries)
+                    cached.remove(playlist.id)
+                    failed += result.warnings.map { "${playlist.name}: $it" }
+                    val prefix = loaded.toList()
+                    val pending = cached.values.toList()
+                    remoteChannels = withContext(kotlinx.coroutines.Dispatchers.Default) { prefix + pending.flatten() }
                 }
-                remoteChannels = loaded
+                remoteChannels = loaded.toList()
                 val uriString = identity.localUri
                 if (!uriString.isNullOrBlank()) {
                     localChannels = runCatching { Api.readLocalPlaylist(context, android.net.Uri.parse(uriString)) }

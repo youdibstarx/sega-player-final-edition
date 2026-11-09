@@ -152,6 +152,12 @@ object Api {
             }
             batches.close(); consumer.join()
             PlaylistLoad(result)
+        } catch (ex: Exception) {
+            if (ex is kotlinx.coroutines.CancellationException) throw ex
+            // Deliver the last parsed prefix before reporting a truncated/failed response.
+            // Cancelling the consumer here discarded already downloaded channels.
+            batches.close(); consumer.join()
+            throw ex
         } finally { batches.cancel(); consumer.cancel() }
     }
 
