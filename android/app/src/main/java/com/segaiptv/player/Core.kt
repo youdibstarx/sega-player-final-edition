@@ -222,7 +222,7 @@ object M3uParser {
                 check()
                 characters += line.length
                 require(characters <= 128L * 1024 * 1024) { "Playlist too large" }
-                val trimmed = line.trim().trimStart('\uFEFF')
+                val trimmed = line.trim().trimStart('\uFEFF').replace('“', '"').replace('”', '"').replace("&quot;", "\"")
                 when {
                     trimmed.startsWith("#EXTM3U", ignoreCase = true) -> {
                         val attrs = attribute.findAll(trimmed).associate {
@@ -237,10 +237,10 @@ object M3uParser {
                     }
                     trimmed.startsWith("#EXTINF", ignoreCase = true) -> {
                         val separator = titleSeparator(trimmed)
-                        val metadata = if (separator < 0) trimmed else trimmed.substring(0, separator)
-                        val attrs = attribute.findAll(metadata).associate { it.groupValues[1].lowercase(java.util.Locale.ROOT) to (it.groupValues[2].ifEmpty { it.groupValues[3] }.ifEmpty { it.groupValues[4] }) }
+                        val attrs = attribute.findAll(trimmed).associate { it.groupValues[1].lowercase(java.util.Locale.ROOT) to (it.groupValues[2].ifEmpty { it.groupValues[3] }.ifEmpty { it.groupValues[4] }) }
                         details = attrs
-                        title = (if (separator < 0) attrs["tvg-name"].orEmpty() else trimmed.substring(separator + 1)).trim()
+                        val trailingAttribute = attribute.findAll(trimmed).firstOrNull { it.range.first > separator && separator >= 0 && it.groupValues[1].lowercase(java.util.Locale.ROOT) in setOf("group-title", "group", "tvg-logo", "logo", "poster", "cover", "tvg-name") }?.range?.first
+                        title = (if (separator < 0) attrs["tvg-name"].orEmpty() else trimmed.substring(separator + 1, trailingAttribute ?: trimmed.length)).trim()
                             .ifBlank { attrs["tvg-name"].orEmpty().ifBlank { "قناة" } }
                         group = attrs["group-title"].orEmpty().ifBlank { attrs["group"].orEmpty() }.ifBlank { directiveGroup }.ifBlank { "غير مصنف" }
                         logo = listOf("poster", "cover", "tvg-logo", "logo", "stream-icon")

@@ -189,7 +189,7 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
                 // Reuse loaded objects on manual refresh instead of deserializing a second library.
                 val existing = withContext(kotlinx.coroutines.Dispatchers.Default) { remoteChannels.groupBy { it.sourceUrl } }
                 val cached = mutableMapOf<Int, List<Channel>>()
-                for (playlist in freshConfig.playlists.take(30)) {
+                for (playlist in freshConfig.playlists.filter { XtreamSource.from(it.url) == null }.take(30)) {
                     cached[playlist.id] = existing[playlist.url] ?: LibraryCache.read(context, playlist)
                 }
                 remoteChannels = withContext(kotlinx.coroutines.Dispatchers.Default) { cached.values.flatten() }
@@ -197,7 +197,7 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
                 val loaded = mutableListOf<Channel>()
                 val failed = mutableListOf<String>()
                 val forceRefresh = refreshToken > 0 && refreshToken != catalogueToken
-                for (playlist in freshConfig.playlists.take(30)) {
+                for (playlist in freshConfig.playlists.filter { XtreamSource.from(it.url) == null }.take(30)) {
                     val saved = cached[playlist.id].orEmpty()
                     val needsDownload = forceRefresh || saved.isEmpty()
                     val result = refreshVisiblePlaylist(saved,

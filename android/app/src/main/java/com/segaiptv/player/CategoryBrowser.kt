@@ -24,19 +24,16 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
     channels: List<Channel>, localLoading: Boolean, favorites: Set<String>, accent: Color,
     query: String, refreshToken: Int, onPlay: (Channel) -> Unit,
     onToggleFavorite: (Channel) -> Unit, onLoaded: (List<Channel>) -> Unit, onChoose: () -> Unit,
-    loadCategories: suspend (Playlist, String) -> List<ProviderCategory> = { p, k ->
-        val categories = CategoryCatalogue.categories(p, k)
-        try {
-            val ranks = ProviderOrder.load(p, refreshToken, categories.map { it.name }.toSet())
-            ProviderOrder.arrange(categories, ranks).map { it.copy(sourceOrderKnown = it.name in ranks) }
-        }
-        catch (ex: Exception) {
-            if (ex is CancellationException) throw ex
-            categories.map { it.copy(sourceOrderKnown = false) }
-        }
-    },
-    loadEntries: suspend (ProviderCategory) -> List<Channel> = { CategoryCatalogue.entries(it) },
+    loadCategories: (suspend (Playlist, String) -> List<ProviderCategory>)? = null,
+    loadEntries: (suspend (ProviderCategory) -> List<Channel>)? = null,
     memory: CategoryMemory = remember { CategoryMemory() }, m3uOnly: Boolean = false) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val categoryLoader: suspend (Playlist, String) -> List<ProviderCategory> = loadCategories ?: { p, k ->
+        CategoryDiskCache.categories(context, p, k, refreshToken) { CategoryCatalogue.categories(p, k) }
+    }
+    val entryLoader: suspend (ProviderCategory) -> List<Channel> = loadEntries ?: { category ->
+        CategoryDiskCache.entries(context, category, refreshToken) { CategoryCatalogue.entries(category) }
+    }
     val kind = when (page) { "movies" -> "vod"; "series" -> "series"; else -> "live" }
     val providers = remember(playlists, m3uOnly) { if (m3uOnly) emptyList() else playlists.filter { XtreamSource.from(it.url) != null }.take(30) }
     val snapshot = memory.page(providers, refreshToken, kind)
@@ -64,7 +61,7 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
         for (batch in providers.chunked(4)) {
             val loaded = coroutineScope {
                 batch.map { playlist -> async {
-                    try { loadCategories(playlist, kind) }
+                    try { categoryLoader(playlist, kind) }
                     catch (ex: Exception) { if (ex is CancellationException) throw ex; null }
                 } }.awaitAll()
             }
@@ -88,7 +85,7 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
         if (selected != null) {
             entriesLoading = true
             try {
-                entries = loadEntries(selected)
+                entries = entryLoader(selected)
                 snapshot.selectedKey = selectedKey; snapshot.entries = entries
                 loadedCallback(entries)
             } catch (ex: Exception) { if (ex is CancellationException) throw ex; entriesError = true }

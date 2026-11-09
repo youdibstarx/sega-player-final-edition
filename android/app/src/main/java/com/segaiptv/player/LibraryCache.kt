@@ -13,11 +13,11 @@ import java.io.File
 /** Private, bounded, atomic catalogue snapshots; never used to decide activation. */
 internal object LibraryCache {
     private fun directory(context: Context) = File(context.noBackupFilesDir, "catalogue_v1").apply { mkdirs() }
-    private fun file(context: Context, playlist: Playlist) = File(directory(context), mediaKey(playlist.url) + ".jsonl")
-    suspend fun read(context: Context, playlist: Playlist): List<Channel> = withContext(Dispatchers.IO) {
+    private fun file(context: Context, playlist: Playlist, scope: String) = File(directory(context), mediaKey(playlist.url) + (if (scope.isEmpty()) "" else "-" + mediaKey(scope)) + ".jsonl")
+    suspend fun read(context: Context, playlist: Playlist, scope: String = ""): List<Channel> = withContext(Dispatchers.IO) {
         val coroutine = currentCoroutineContext()
         try {
-            val f = file(context, playlist)
+            val f = file(context, playlist, scope)
             // Keep the last snapshot until an explicit refresh or source removal.
             if (!f.exists() || f.length() > 80L * 1024 * 1024)
                 return@withContext emptyList()
@@ -37,9 +37,9 @@ internal object LibraryCache {
             emptyList()
         }
     }
-    suspend fun write(context: Context, playlist: Playlist, entries: List<Channel>) = withContext(Dispatchers.IO) {
+    suspend fun write(context: Context, playlist: Playlist, entries: List<Channel>, scope: String = "") = withContext(Dispatchers.IO) {
         val coroutine = currentCoroutineContext()
-        val atomic = AtomicFile(file(context, playlist))
+        val atomic = AtomicFile(file(context, playlist, scope))
         var stream: java.io.FileOutputStream? = null
         try {
             stream = atomic.startWrite()
@@ -63,8 +63,8 @@ internal object LibraryCache {
         }
     }
     suspend fun prune(context: Context, playlists: List<Playlist>) = withContext(Dispatchers.IO) {
-        val keep = playlists.map { mediaKey(it.url) + ".jsonl" }.toSet()
-        directory(context).listFiles().orEmpty().filter { it.name !in keep }.forEach { it.delete() }
+        val keep = playlists.map { mediaKey(it.url) }.toSet()
+        directory(context).listFiles().orEmpty().filter { file -> keep.none { file.name == "$it.jsonl" || file.name.startsWith("$it-") } }.forEach { it.delete() }
     }
 }
 

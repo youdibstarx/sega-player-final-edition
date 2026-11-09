@@ -25,7 +25,12 @@ internal suspend fun refreshVisiblePlaylist(
         if (ex is CancellationException) throw ex
         return withContext(Dispatchers.Default) {
             PlaylistLoad((partial + cached).distinctBy { it.url },
-                listOf("Playlist refresh incomplete; keeping available channels"))
+                listOf(when {
+                    ex is java.net.SocketTimeoutException -> "M3U download timed out; keeping available channels"
+                    ex.message == "Playlist too large" -> "M3U exceeds device library limit; keeping available channels"
+                    ex is java.io.IOException -> "M3U connection interrupted; keeping available channels"
+                    else -> "Playlist refresh incomplete; keeping available channels"
+                }))
         }
     }
     return withContext(Dispatchers.Default) {
