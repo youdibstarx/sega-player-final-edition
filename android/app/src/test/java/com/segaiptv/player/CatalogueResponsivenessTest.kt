@@ -15,7 +15,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.flow.first
 
 @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -103,13 +102,13 @@ class CatalogueResponsivenessTest {
         compose.activity.getSharedPreferences("segaiptv_ui", android.content.Context.MODE_PRIVATE)
             .edit().putString("language", "en").commit()
         val rows = androidx.compose.runtime.mutableStateOf<List<Channel>>(emptyList())
-        var finish by mutableIntStateOf(0)
+        val interruptDownload = kotlinx.coroutines.CompletableDeferred<Unit>()
         var finished by mutableIntStateOf(0)
         compose.setContent {
             androidx.compose.runtime.LaunchedEffect(Unit) {
                 val result = refreshVisiblePlaylist(emptyList(), download = { publish ->
                     publish(listOf(Channel("Test channel", "https://provider.test/live/1.ts", "Group", "", "P")))
-                    androidx.compose.runtime.snapshotFlow { finish }.first { it == 1 }
+                    interruptDownload.await()
                     throw java.io.IOException("Truncated response")
                 }, onPartial = { rows.value = it })
                 rows.value = result.entries
@@ -125,7 +124,7 @@ class CatalogueResponsivenessTest {
             androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { it() }
         compose.onNodeWithText("Group (1)").performKeyInput { pressKey(androidx.compose.ui.input.key.Key.Enter) }
         compose.waitUntil(5000) { compose.onAllNodesWithText("Test channel").fetchSemanticsNodes().isNotEmpty() }
-        compose.runOnIdle { finish = 1 }
+        compose.runOnIdle { interruptDownload.complete(Unit) }
         compose.waitUntil(5000) { finished == 1 }
         compose.onNodeWithText("Group (1)").assertIsFocused()
         compose.onNodeWithText("Test channel").assertIsDisplayed()
