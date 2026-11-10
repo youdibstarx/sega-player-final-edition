@@ -383,8 +383,8 @@ private fun TvSettings(config: AppConfig, identity: DeviceIdentity, count: Int,
     onCopyMac: () -> Unit, onCopyKey: () -> Unit, modifier: Modifier,
     channels: List<Channel>, warnings: String, loading: Boolean, checkUpdates: () -> Unit, openChannels: () -> Unit
 ) {
-    Row(modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+    Row(modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(tr(R.string.device_settings), color = accent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 CompactIdentity(tr(R.string.virtual_mac), identity.virtualMac, Modifier.weight(1.15f), onCopyMac)
@@ -398,7 +398,7 @@ private fun TvSettings(config: AppConfig, identity: DeviceIdentity, count: Int,
             Text(tr(R.string.copy_hint), color = tvMuted, fontSize = 10.sp)
             if (error.isNotBlank()) Text(statusText(error), color = Color(0xFFFFC5AD), fontSize = 11.sp, maxLines = 1)
         }
-        Column(Modifier.weight(1.1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.weight(1.1f).fillMaxHeight(), verticalArrangement = Arrangement.SpaceEvenly) {
             SettingsGroup(tr(R.string.preferences_group)) {
                 LanguagePicker(Modifier.weight(1f))
                 ThemePicker(Modifier.weight(1f))
@@ -418,7 +418,7 @@ private fun TvSettings(config: AppConfig, identity: DeviceIdentity, count: Int,
 @Composable
 private fun CompactIdentity(title: String, value: String, modifier: Modifier, onCopy: () -> Unit) {
     TvFocusItem(onClick = onCopy, accent = v3Gold, modifier = modifier, shape = RoundedCornerShape(8.dp)) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 18.dp)) {
             Text("$title  ⧉", color = tvMuted, fontSize = 11.sp)
             Text(value, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         }
@@ -427,7 +427,7 @@ private fun CompactIdentity(title: String, value: String, modifier: Modifier, on
 
 @Composable
 private fun TvInformation(title: String, value: String, modifier: Modifier) {
-    Column(modifier.clip(RoundedCornerShape(14.dp)).background(tvSurface).padding(9.dp)) {
+    Column(modifier.clip(RoundedCornerShape(14.dp)).background(tvSurface).padding(horizontal = 14.dp, vertical = 20.dp)) {
         Text(title, fontSize = 11.sp, color = tvMuted)
         Spacer(Modifier.height(3.dp))
         Text(value, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold,
