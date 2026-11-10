@@ -23,6 +23,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
@@ -53,8 +55,19 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
             .filter { query.isBlank() || it.title.contains(query, true) || it.entries.any { e -> e.name.contains(query, true) } }
     }
     val detail = remember(allTitles, detailId) { allTitles.firstOrNull { it.id == detailId } }
+    val moviePlayFocus = remember { FocusRequester() }
+    val seasonFocus = remember { FocusRequester() }
     var remoteEpisodes by remember(detailId) { mutableStateOf<List<Channel>>(emptyList()) }
     var episodeLoading by remember(detailId) { mutableStateOf(false) }
+    LaunchedEffect(detailId, series, episodeLoading) {
+        if (detailId != null && !series) moviePlayFocus.requestFocus()
+        if (detailId != null && series && !episodeLoading) {
+            // The season buttons are rendered only after their catalogue is ready.
+            kotlinx.coroutines.yield()
+            try { seasonFocus.requestFocus() } catch (_: IllegalStateException) { }
+        }
+    }
+
     var episodeError by remember(detailId) { mutableStateOf(false) }
     var synopsis by remember(detailId) { mutableStateOf("") }
     var synopsisOpen by remember(detailId) { mutableStateOf(false) }
@@ -105,7 +118,7 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
                         } else if (!episodeLoading && seasons.isEmpty()) Text(tr(R.string.no_episodes), color = Color.LightGray)
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             items(seasons.keys.toList()) { n ->
-                                TvAction(n?.let { tr(R.string.season, it) } ?: tr(R.string.episodes), selected = season == n) { season = n }
+                                TvAction(n?.let { tr(R.string.season, it) } ?: tr(R.string.episodes), modifier = if (n == seasons.keys.first()) Modifier.focusRequester(seasonFocus) else Modifier, selected = season == n) { season = n }
                             }
                         }
                         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -131,7 +144,7 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TvAction(tr(R.string.synopsis)) { synopsisOpen = true }
-                            TvAction(tr(R.string.play_movie)) { onPlay(movie) }
+                            TvAction(tr(R.string.play_movie), modifier = Modifier.focusRequester(moviePlayFocus)) { onPlay(movie) }
                             TvAction((if (movie.url in favorites) "♥ " else "♡ ") + tr(R.string.favorite)) { onToggleFavorite(movie) }
                         }
                     }
