@@ -174,14 +174,24 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
 }
 
 @Composable
-private fun PosterArtwork(title: VodTitle, modifier: Modifier) {
-    var imageLoaded by remember(title.cover) { mutableStateOf(false) }
+internal fun PosterArtwork(title: VodTitle, modifier: Modifier) {
+    val context = LocalContext.current
+    val entry = title.entries.firstOrNull()
+    var attempt by remember(title.id, title.cover) { mutableIntStateOf(0) }
+    var cover by remember(title.id, title.cover) { mutableStateOf(title.cover) }
+    var imageLoaded by remember(title.id, cover) { mutableStateOf(false) }
+    LaunchedEffect(title.id, title.cover, attempt) {
+        if (entry != null) cover = PosterRepository.resolve(context, entry, forceDetails = attempt > 0)
+    }
+    val request = remember(cover, context) {
+        coil.request.ImageRequest.Builder(context).data(cover).size(360, 540).allowHardware(false).build()
+    }
     Box(modifier.background(appTheme.row), contentAlignment = Alignment.Center) {
         if (!imageLoaded) Text(tr(R.string.no_cover), color = Color.LightGray, fontSize = 11.sp,
             modifier = Modifier.padding(10.dp))
-        if (title.cover.isNotBlank()) AsyncImage(title.cover, title.title,
+        if (cover.isNotBlank()) AsyncImage(request, title.title,
             Modifier.fillMaxSize(), contentScale = ContentScale.Fit,
-            onSuccess = { imageLoaded = true }, onError = { imageLoaded = false })
+            onSuccess = { imageLoaded = true }, onError = { imageLoaded = false; if (attempt == 0) attempt = 1 })
     }
 }
 
