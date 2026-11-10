@@ -30,6 +30,7 @@ class ProviderCategoryUiTest {
                     return when {
                         action == "get_vod_categories" -> MockResponse().setBody("""[{"category_id":"7","category_name":"Provider films"},{"category_id":"8","category_name":"Documentaries"}]""")
                         action == "get_vod_streams" && u.queryParameter("category_id") == "7" -> MockResponse().setBody("""[{"stream_id":123,"name":"Selected movie","category_id":"7","container_extension":"mp4"}]""")
+                        action == "get_vod_info" -> MockResponse().setBody("""{"info":{}}""")
                         else -> MockResponse().setResponseCode(500)
                     }
                 }
@@ -48,7 +49,10 @@ class ProviderCategoryUiTest {
             compose.onNodeWithText("Provider films").performClick()
             compose.waitUntil(5000) { compose.onAllNodesWithText("Selected movie").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Selected movie").assertIsDisplayed()
-            assertEquals(listOf("/player_api.php:get_vod_categories:null", "/player_api.php:get_vod_streams:7"), requests.toList())
+            val recorded = synchronized(requests) { requests.toList() }
+            assertEquals(listOf("/player_api.php:get_vod_categories:null", "/player_api.php:get_vod_streams:7"),
+                recorded.filterNot { it.contains(":get_vod_info:") })
+            assertTrue(recorded.all { it.startsWith("/player_api.php:") })
         }
     }
 }
