@@ -1,6 +1,11 @@
 package com.segaiptv.player
 
 import android.view.View
+import android.view.KeyEvent
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -25,7 +30,7 @@ import androidx.media3.ui.PlayerView
 @Composable
 fun MediaSurface(channel: Channel?, modifier: Modifier = Modifier, controls: Boolean = false,
     onControlsVisible: (Boolean) -> Unit = {}, onPlayer: (ExoPlayer?) -> Unit = {},
-    onEnded: () -> Unit = {}) {
+    onEnded: () -> Unit = {}, onOk: () -> Unit = {}) {
     val store = ViewerStore.get(LocalContext.current)
     store.revision
     var unlock by remember(channel?.url) { mutableStateOf(false) }
@@ -46,17 +51,18 @@ fun MediaSurface(channel: Channel?, modifier: Modifier = Modifier, controls: Boo
                 }
             }
         }
-    } else UnlockedMediaSurface(channel, modifier, controls, position ?: 0L, onControlsVisible, onPlayer, onEnded)
+    } else UnlockedMediaSurface(channel, modifier, controls, position ?: 0L, onControlsVisible, onPlayer, onEnded, onOk)
 }
 
 /** Owns one player while STARTED and persists position before every release. */
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls: Boolean, initialPosition: Long,
-    onControlsVisible: (Boolean) -> Unit, onPlayer: (ExoPlayer?) -> Unit, onEnded: () -> Unit) {
+    onControlsVisible: (Boolean) -> Unit, onPlayer: (ExoPlayer?) -> Unit, onEnded: () -> Unit, onOk: () -> Unit) {
     val visibilityCallback by rememberUpdatedState(onControlsVisible)
     val playerCallback by rememberUpdatedState(onPlayer)
     val endedCallback by rememberUpdatedState(onEnded)
+    val okCallback by rememberUpdatedState(onOk)
     val context = LocalContext.current
     val store = remember { ViewerStore.get(context) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -180,6 +186,13 @@ private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls
     Box(modifier.background(Color.Black), contentAlignment = Alignment.Center) {
         AndroidView(factory = { ctx -> PlayerView(ctx).apply {
             useController = controls
+            setOnKeyListener { _, keyCode, event ->
+                if (controls && event.action == KeyEvent.ACTION_UP &&
+                    (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER)) {
+                    okCallback()
+                    true
+                } else false
+            }
             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             controllerShowTimeoutMs = 3000
             controllerAutoShow = false
@@ -223,6 +236,15 @@ fun PlaybackScreen(channel: Channel, accent: Color, onBack: () -> Unit,
     isFavorite: Boolean, onFavorite: () -> Unit, entries: List<Channel> = emptyList(),
     onNext: (Channel) -> Unit = {}) {
     var controlsVisible by remember(channel.url) { mutableStateOf(false) }
+    var channelMenu by remember(channel.url) { mutableStateOf(false) }
+    val isLive = !isVod(channel)
+    val menuFocus = remember { FocusRequester() }
+    LaunchedEffect(channelMenu) {
+        if (channelMenu) {
+            kotlinx.coroutines.yield()
+            try { menuFocus.requestFocus() } catch (_: IllegalStateException) { }
+        }
+    }
     var active by remember(channel.url) { mutableStateOf<ExoPlayer?>(null) }
     var tracks by remember(channel.url) { mutableStateOf(false) }
     var ended by remember(channel.url) { mutableStateOf(false) }
@@ -237,7 +259,7 @@ fun PlaybackScreen(channel: Channel, accent: Color, onBack: () -> Unit,
         }
     }
     val next = remember(channel, episodes) { nextEpisode(channel, episodes) }
-    BackHandler(onBack = onBack)
+    BackHandler { if (channelMenu) channelMenu = false else onBack() }
     if (tracks && active != null) TrackPicker(active!!) { tracks = false }
     if (pin) PinDialog(onClose = { pin = false }, onSuccess = { pin = false; lockMenu = true })
     if (lockMenu && !store.unlocked) PinDialog(onClose = { lockMenu = false }, onSuccess = {})
@@ -248,7 +270,30 @@ fun PlaybackScreen(channel: Channel, accent: Color, onBack: () -> Unit,
         } }, confirmButton = { TextButton(onClick = { lockMenu = false }) { Text(tr(R.string.close)) } })
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         MediaSurface(channel, Modifier.fillMaxSize(), controls = true, onControlsVisible = { controlsVisible = it },
-            onPlayer = { active = it }, onEnded = { ended = true })
+            onPlayer = { active = it }, onEnded = { ended = true },
+            onOk = { if (isLive) channelMenu = true })
+        if (channelMenu && isLive) {
+            val liveEntries = remember(entries) { entries.filter { !isVod(it) }.distinctBy { it.url } }
+            val currentIndex = liveEntries.indexOfFirst { it.url == channel.url }
+            Surface(modifier = Modifier.align(Alignment.CenterStart).fillMaxWidth(.43f).fillMaxHeight(),
+                color = Color.Black.copy(alpha = .92f)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(tr(R.string.channels), color = accent, style = MaterialTheme.typography.titleMedium)
+                    LazyColumn(Modifier.weight(1f)) {
+                        items(liveEntries.size) { index ->
+                            val entry = liveEntries[index]
+                            TvAction(entry.name, modifier = Modifier.fillMaxWidth()
+                                .then(if (index == (if (currentIndex >= 0) currentIndex else 0))
+                                    Modifier.focusRequester(menuFocus) else Modifier),
+                                selected = entry.url == channel.url) {
+                                channelMenu = false
+                                if (entry.url != channel.url) onNext(entry)
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if (controlsVisible) Row(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = .7f)).padding(8.dp),
             verticalAlignment = Alignment.CenterVertically) {
             TvAction(tr(R.string.back), onClick = onBack)
