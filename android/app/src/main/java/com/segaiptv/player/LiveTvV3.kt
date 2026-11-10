@@ -41,15 +41,15 @@ fun TvAction(label: String, modifier: Modifier = Modifier, selected: Boolean = f
 fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Boolean,
     favorites: Set<String>, warnings: String, onPlay: (Channel) -> Unit,
     onToggleFavorite: (Channel) -> Unit, includeVod: Boolean = false, search: String = "", showCategories: Boolean = true, orderScope: String? = null) {
-    val live = remember(channels, includeVod) {
-        if (includeVod) channels else channels.filter { !isVodEntry(it, false) && !isVodEntry(it, true) }
+    val live = rememberCatalogueWork<List<Channel>>(emptyList(), channels, includeVod) {
+        if (includeVod) channels else channels.filter { catalogueKind(it) == "live" }
     }
-    val groups = remember(live) { live.groupBy { it.category.ifBlank { "Other" } } }
+    val groups = rememberCatalogueWork<Map<String, List<Channel>>>(emptyMap(), live) { live.groupBy { it.category.ifBlank { "Other" } } }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     var onlyFavorites by rememberSaveable { mutableStateOf(false) }
     var selectedUrl by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(groups) { if (category !in groups) category = groups.keys.firstOrNull() }
-    val filtered = remember(live, groups, category, onlyFavorites, favorites, search) {
+    val filtered = rememberCatalogueWork<List<Channel>>(emptyList(), live, groups, category, onlyFavorites, favorites, search) {
         (if (onlyFavorites) live.filter { it.url in favorites } else if (search.isNotBlank()) live else groups[category].orEmpty())
             .filter { search.isBlank() || it.name.contains(search, true) }
     }
@@ -118,4 +118,5 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
         }
     }
 }
+
 

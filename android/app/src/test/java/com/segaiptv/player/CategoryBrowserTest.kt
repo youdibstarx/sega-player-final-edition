@@ -37,10 +37,12 @@ class CategoryBrowserTest {
             }
         }
         compose.onNodeWithText("Drama").performClick()
+        compose.waitUntil(5000) { compose.onAllNodesWithText("Sample movie").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Sample movie").assertIsDisplayed()
         compose.runOnIdle { fullscreen.value = true }
         compose.waitForIdle()
         compose.runOnIdle { fullscreen.value = false }
+        compose.waitUntil(5000) { compose.onAllNodesWithText("Sample movie").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Sample movie").assertIsDisplayed()
         compose.runOnIdle { assertEquals(1,categoryCalls); assertEquals(1,entryCalls) }
     }
@@ -55,9 +57,12 @@ class CategoryBrowserTest {
                     loadCategories = { _, _ -> error("M3U must not fetch API categories") }, m3uOnly = true)
             }
         }
+        compose.waitUntil(5000) { compose.onAllNodesWithText("First group (1)").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("First group (1)").performClick()
+        compose.waitUntil(5000) { compose.onAllNodesWithText("First movie").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("First movie").assertIsDisplayed()
         compose.runOnIdle { entries.value = entries.value + Channel("Later movie", "https://provider.test/movie/2.mp4", "First group", "", "Provider", mediaType = "movie", sourceUrl = playlist.url) }
+        compose.waitUntil(5000) { compose.onAllNodesWithText("Later movie").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Later movie").assertIsDisplayed()
     }
 

@@ -66,7 +66,9 @@ class BackendTransportTest {
                 throw javax.net.ssl.SSLHandshakeException("private provider URL")
             }
         }
-        assertEquals("Backend TLS verification failed", tls.message)
+        assertTrue(tls is BackendTransportFailure)
+        assertEquals(BackendTransportFailure.Reason.TLS, (tls as BackendTransportFailure).reason)
+        assertNull(tls.message)
         assertNull(tls.cause)
     }
     @Test fun clockEndpointMissingIsARecoverableHttpErrorWithNoSensitiveBody() {

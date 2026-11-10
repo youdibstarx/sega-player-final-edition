@@ -30,13 +30,13 @@ jobs:
           APK=android/app/build/outputs/apk/hardened/app-hardened-unsigned.apk
           test "$(apkanalyzer manifest debuggable "$APK")" = "false"
           test "$(apkanalyzer manifest application-id "$APK")" = "com.segaiptv.player.v3.secure"
-          test "$(apkanalyzer manifest version-code "$APK")" = "35"
+          test "$(apkanalyzer manifest version-code "$APK")" = "42"
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "$APK"
-          cp "$APK" dist/SEGA_PLAYER_V3_0.5.17_UNSIGNED.apk
+          cp "$APK" dist/SEGA_PLAYER_V3_0.5.24_UNSIGNED.apk
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" dist/apksigner.jar
       - uses: actions/upload-artifact@v4
         with:
-          name: SEGA-0.5.17-unsigned
+          name: SEGA-0.5.24-unsigned
           path: dist/
       - uses: actions/upload-artifact@v4
         if: always()

@@ -152,6 +152,12 @@ object Api {
             }
             batches.close(); consumer.join()
             PlaylistLoad(result)
+        } catch (ex: Exception) {
+            if (ex is kotlinx.coroutines.CancellationException) throw ex
+            // Deliver the last parsed prefix before reporting a truncated/failed response.
+            // Cancelling the consumer here discarded already downloaded channels.
+            batches.close(); consumer.join()
+            throw ex
         } finally { batches.cancel(); consumer.cancel() }
     }
 
@@ -211,68 +217,76 @@ object M3uParser {
         var directiveGroup = ""
         var details = emptyMap<String, String>()
         var epgUrl = ""
-        for (line in lines) {
-            check()
-            characters += line.length
-            require(characters <= 128L * 1024 * 1024) { "Playlist too large" }
-            val trimmed = line.trim().trimStart('\uFEFF')
-            when {
-                trimmed.startsWith("#EXTM3U", ignoreCase = true) -> {
-                    val attrs = attribute.findAll(trimmed).associate {
-                        it.groupValues[1].lowercase(java.util.Locale.ROOT) to
-                            it.groupValues[2].ifEmpty { it.groupValues[3] }.ifEmpty { it.groupValues[4] }
+        try {
+            for (line in lines) {
+                check()
+                characters += line.length
+                require(characters <= 128L * 1024 * 1024) { "Playlist too large" }
+                val trimmed = line.trim().trimStart('\uFEFF').replace('“', '"').replace('”', '"').replace("&quot;", "\"")
+                when {
+                    trimmed.startsWith("#EXTM3U", ignoreCase = true) -> {
+                        val attrs = attribute.findAll(trimmed).associate {
+                            it.groupValues[1].lowercase(java.util.Locale.ROOT) to
+                                it.groupValues[2].ifEmpty { it.groupValues[3] }.ifEmpty { it.groupValues[4] }
+                        }
+                        val value = (attrs["x-tvg-url"] ?: attrs["url-tvg"] ?: attrs["tvg-url"]).orEmpty()
+                        epgUrl = value.split(',').map { it.trim() }.firstNotNullOfOrNull { candidate ->
+                            runCatching { URI(baseUrl).resolve(PlaylistSource.normalize(candidate)).toString() }.getOrNull()
+                                ?.takeIf { candidate.isNotBlank() && (it.startsWith("https://") || it.startsWith("http://")) }
+                        }.orEmpty()
                     }
-                    val value = (attrs["x-tvg-url"] ?: attrs["url-tvg"] ?: attrs["tvg-url"]).orEmpty()
-                    epgUrl = value.split(',').map { it.trim() }.firstNotNullOfOrNull { candidate ->
-                        runCatching { URI(baseUrl).resolve(PlaylistSource.normalize(candidate)).toString() }.getOrNull()
-                            ?.takeIf { candidate.isNotBlank() && (it.startsWith("https://") || it.startsWith("http://")) }
-                    }.orEmpty()
-                }
-                trimmed.startsWith("#EXTINF", ignoreCase = true) -> {
-                    val separator = titleSeparator(trimmed)
-                    val metadata = if (separator < 0) trimmed else trimmed.substring(0, separator)
-                    val attrs = attribute.findAll(metadata).associate { it.groupValues[1].lowercase(java.util.Locale.ROOT) to (it.groupValues[2].ifEmpty { it.groupValues[3] }.ifEmpty { it.groupValues[4] }) }
-                    details = attrs
-                    title = (if (separator < 0) attrs["tvg-name"].orEmpty() else trimmed.substring(separator + 1)).trim()
-                        .ifBlank { attrs["tvg-name"].orEmpty().ifBlank { "قناة" } }
-                    group = attrs["group-title"].orEmpty().ifBlank { attrs["group"].orEmpty() }.ifBlank { directiveGroup }.ifBlank { "غير مصنف" }
-                    logo = listOf("poster", "cover", "tvg-logo", "logo", "stream-icon")
-                        .firstNotNullOfOrNull { attrs[it]?.takeIf { value -> value.isNotBlank() } }.orEmpty()
-                    logo = runCatching { URI(baseUrl).resolve(logo.replace("&amp;", "&")).toString() }
-                        .getOrDefault(logo).takeIf { logo.isNotBlank() && (it.startsWith("https://") || it.startsWith("http://")) }.orEmpty()
-                }
-                trimmed.startsWith("#EXTGRP:", ignoreCase = true) -> {
-                    directiveGroup = trimmed.substringAfter(':').trim()
-                    group = directiveGroup.ifBlank { "غير مصنف" }
-                }
-                trimmed.isNotBlank() && !trimmed.startsWith('#') -> {
-                    val resolved = runCatching {
-                        if (baseUrl.isNotBlank()) URI(baseUrl).resolve(trimmed).toString() else trimmed
-                    }.getOrDefault(trimmed)
-                    if (resolved.startsWith("http://", true) || resolved.startsWith("https://", true)) {
-                        channels += Channel(title.ifBlank { "قناة ${channels.size + 1}" }, resolved, group, logo, listName,
-                            mediaType = details["media-type"] ?: details["tvg-type"] ?: details["type"].orEmpty(),
-                            seriesTitle = details["series-title"] ?: details["show-title"].orEmpty(),
-                            season = (details["season"] ?: details["season-number"])?.toIntOrNull(),
-                            episode = (details["episode"] ?: details["episode-number"])?.toIntOrNull(),
-                            description = details["plot"] ?: details["description"].orEmpty(),
-                            sourceUrl = sourceUrl, seriesId = details["series-id"].orEmpty(),
-                            streamId = details["stream-id"].orEmpty(),
-                            epgId = details["tvg-id"].orEmpty(), epgUrl = epgUrl)
+                    trimmed.startsWith("#EXTINF", ignoreCase = true) -> {
+                        val separator = titleSeparator(trimmed)
+                        val attrs = attribute.findAll(trimmed).associate { it.groupValues[1].lowercase(java.util.Locale.ROOT) to (it.groupValues[2].ifEmpty { it.groupValues[3] }.ifEmpty { it.groupValues[4] }) }
+                        details = attrs
+                        val trailingAttribute = attribute.findAll(trimmed).firstOrNull { it.range.first > separator && separator >= 0 && it.groupValues[1].lowercase(java.util.Locale.ROOT) in setOf("group-title", "group", "tvg-logo", "logo", "poster", "cover", "tvg-name") }?.range?.first
+                        title = (if (separator < 0) attrs["tvg-name"].orEmpty() else trimmed.substring(separator + 1, trailingAttribute ?: trimmed.length)).trim()
+                            .ifBlank { attrs["tvg-name"].orEmpty().ifBlank { "قناة" } }
+                        group = attrs["group-title"].orEmpty().ifBlank { attrs["group"].orEmpty() }.ifBlank { directiveGroup }.ifBlank { "غير مصنف" }
+                        logo = listOf("poster", "cover", "tvg-logo", "logo", "stream-icon")
+                            .firstNotNullOfOrNull { attrs[it]?.takeIf { value -> value.isNotBlank() } }.orEmpty()
+                        logo = runCatching { URI(baseUrl).resolve(logo.replace("&amp;", "&")).toString() }
+                            .getOrDefault(logo).takeIf { logo.isNotBlank() && (it.startsWith("https://") || it.startsWith("http://")) }.orEmpty()
                     }
-                    title = ""; group = "غير مصنف"; logo = ""; details = emptyMap()
+                    trimmed.startsWith("#EXTGRP:", ignoreCase = true) -> {
+                        directiveGroup = trimmed.substringAfter(':').trim()
+                        group = directiveGroup.ifBlank { "غير مصنف" }
+                    }
+                    trimmed.isNotBlank() && !trimmed.startsWith('#') -> {
+                        val resolved = runCatching {
+                            if (baseUrl.isNotBlank()) URI(baseUrl).resolve(trimmed).toString() else trimmed
+                        }.getOrDefault(trimmed)
+                        if (resolved.startsWith("http://", true) || resolved.startsWith("https://", true)) {
+                            kotlin.check(channels.size < MAX_CHANNELS_PER_PLAYLIST) { "Playlist too large" }
+                            channels += Channel(title.ifBlank { "قناة ${channels.size + 1}" }, resolved, group, logo, listName,
+                                mediaType = details["media-type"] ?: details["tvg-type"] ?: details["type"].orEmpty(),
+                                seriesTitle = details["series-title"] ?: details["show-title"].orEmpty(),
+                                season = (details["season"] ?: details["season-number"])?.toIntOrNull(),
+                                episode = (details["episode"] ?: details["episode-number"])?.toIntOrNull(),
+                                description = details["plot"] ?: details["description"].orEmpty(),
+                                sourceUrl = sourceUrl, seriesId = details["series-id"].orEmpty(),
+                                streamId = details["stream-id"].orEmpty(),
+                                epgId = details["tvg-id"].orEmpty(), epgUrl = epgUrl)
+                        }
+                        title = ""; group = "غير مصنف"; logo = ""; details = emptyMap()
+                    }
+                }
+                val now = System.nanoTime()
+                if (channels.size > published && (published == 0 && channels.size >= 30 ||
+                        channels.size - published >= 1000 && now - lastPublish >= 1_000_000_000L)) {
+                    onPartial(channels.toList()); published = channels.size; lastPublish = now
                 }
             }
-            if (channels.size > MAX_CHANNELS_PER_PLAYLIST) error("Playlist too large")
-            val now = System.nanoTime()
-            if (channels.size > published && (published == 0 && channels.size >= 30 ||
-                    channels.size - published >= 250 && now - lastPublish >= 250_000_000L)) {
-                onPartial(channels.toList()); published = channels.size; lastPublish = now
-            }
+        } catch (ex: Exception) {
+            if (ex is kotlinx.coroutines.CancellationException) throw ex
+            // Include rows parsed since the last throttled update before surfacing a failure.
+            if (channels.isNotEmpty()) onPartial(channels.toList())
+            throw ex
         }
         return channels
     }
 }
+
 
 
 

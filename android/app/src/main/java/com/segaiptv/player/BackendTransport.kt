@@ -13,6 +13,10 @@ internal class BackendAccessDenied : IllegalStateException("Backend access denie
 /** Non-authentication HTTP status; does not contain server responses or credentials. */
 internal class BackendHttpError(val statusCode: Int) : IllegalStateException("Backend HTTP $statusCode")
 
+internal class BackendTransportFailure(val reason: Reason) : IllegalStateException() {
+    enum class Reason { DNS, TLS, TIMEOUT, CONNECTION, UNKNOWN }
+}
+
 /** Applies only to the control panel. Provider media URLs have independent transport requirements. */
 internal object BackendTransport {
     internal const val MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -68,13 +72,19 @@ internal object BackendTransport {
             throw http
         } catch (denied: BackendAccessDenied) {
             throw denied
+        } catch (failure: BackendTransportFailure) {
+            throw failure
+        } catch (_: java.net.UnknownHostException) {
+            throw BackendTransportFailure(BackendTransportFailure.Reason.DNS)
         } catch (_: javax.net.ssl.SSLException) {
-            throw IllegalStateException("Backend TLS verification failed")
+            throw BackendTransportFailure(BackendTransportFailure.Reason.TLS)
         } catch (_: java.net.SocketTimeoutException) {
-            throw IllegalStateException("Backend request timed out")
+            throw BackendTransportFailure(BackendTransportFailure.Reason.TIMEOUT)
+        } catch (_: java.net.ConnectException) {
+            throw BackendTransportFailure(BackendTransportFailure.Reason.CONNECTION)
         } catch (_: Exception) {
             // Do not propagate server bodies, URLs, request headers or nested exception messages.
-            throw IllegalStateException("Backend request failed")
+            throw BackendTransportFailure(BackendTransportFailure.Reason.UNKNOWN)
         } finally { connection?.disconnect() }
     }
 }

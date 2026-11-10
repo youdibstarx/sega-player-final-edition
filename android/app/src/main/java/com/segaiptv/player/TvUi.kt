@@ -101,7 +101,7 @@ fun TvShell(
         when (page) {
             "channels", "movies", "series" -> CategoryBrowser(
                 Modifier.weight(1f), config.playlists, page, channels, loading,
-                favorites, accent, query, refreshToken, onPlay, onToggleFavorite, onCategoryLoaded, onChoose = { query = "" }, memory = categoryMemory, m3uOnly = true)
+                favorites, accent, query, refreshToken, onPlay, onToggleFavorite, onCategoryLoaded, onChoose = { query = "" }, memory = categoryMemory, m3uOnly = false)
             "favorites" -> LiveTvV3(Modifier.weight(1f), channels.filter { it.url in favorites }, loading,
                 favorites, catalogueWarnings(warnings), onPlay, onToggleFavorite, includeVod = true, search = query)
             "playlists" -> PlaylistScreen(config, identity, loading, warnings, onRefresh, onLocalFile,
@@ -483,6 +483,7 @@ fun TvVideoScreen(channel: Channel, accent: Color, onBack: () -> Unit,
 ) {
     PlaybackScreen(channel, accent, onBack, isFavorite, onFavorite)
 }
+
 
 
 
