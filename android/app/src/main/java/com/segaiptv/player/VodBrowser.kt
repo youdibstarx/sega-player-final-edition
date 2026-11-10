@@ -176,7 +176,7 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
 @Composable
 internal fun PosterArtwork(title: VodTitle, modifier: Modifier) {
     val context = LocalContext.current
-    val entry = title.entries.firstOrNull()
+    val entry = remember(title.id, title.cover) { title.entries.firstOrNull()?.copy(logo = title.cover) }
     var attempt by remember(title.id, title.cover) { mutableIntStateOf(0) }
     var cover by remember(title.id, title.cover) { mutableStateOf(title.cover) }
     var imageLoaded by remember(title.id, cover) { mutableStateOf(false) }
