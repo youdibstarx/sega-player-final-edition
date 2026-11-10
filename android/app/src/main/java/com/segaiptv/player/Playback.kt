@@ -4,6 +4,7 @@ import android.view.View
 import android.view.KeyEvent
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.activity.compose.BackHandler
@@ -239,12 +240,7 @@ fun PlaybackScreen(channel: Channel, accent: Color, onBack: () -> Unit,
     var channelMenu by remember(channel.url) { mutableStateOf(false) }
     val isLive = !isVod(channel)
     val menuFocus = remember { FocusRequester() }
-    LaunchedEffect(channelMenu) {
-        if (channelMenu) {
-            kotlinx.coroutines.yield()
-            try { menuFocus.requestFocus() } catch (_: IllegalStateException) { }
-        }
-    }
+
     var active by remember(channel.url) { mutableStateOf<ExoPlayer?>(null) }
     var tracks by remember(channel.url) { mutableStateOf(false) }
     var ended by remember(channel.url) { mutableStateOf(false) }
@@ -275,11 +271,19 @@ fun PlaybackScreen(channel: Channel, accent: Color, onBack: () -> Unit,
         if (channelMenu && isLive) {
             val liveEntries = remember(entries) { entries.filter { !isVod(it) }.distinctBy { it.url } }
             val currentIndex = liveEntries.indexOfFirst { it.url == channel.url }
+            val listState = rememberLazyListState()
+            LaunchedEffect(channelMenu, currentIndex) {
+                if (liveEntries.isNotEmpty()) {
+                    listState.scrollToItem(currentIndex.coerceAtLeast(0))
+                    kotlinx.coroutines.yield()
+                    try { menuFocus.requestFocus() } catch (_: IllegalStateException) { }
+                }
+            }
             Surface(modifier = Modifier.align(Alignment.CenterStart).fillMaxWidth(.43f).fillMaxHeight(),
                 color = Color.Black.copy(alpha = .92f)) {
                 Column(Modifier.padding(12.dp)) {
                     Text(tr(R.string.channels), color = accent, style = MaterialTheme.typography.titleMedium)
-                    LazyColumn(Modifier.weight(1f)) {
+                    LazyColumn(Modifier.weight(1f), state = listState) {
                         items(liveEntries.size) { index ->
                             val entry = liveEntries[index]
                             TvAction(entry.name, modifier = Modifier.fillMaxWidth()
