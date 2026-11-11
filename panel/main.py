@@ -144,7 +144,7 @@ def initialize():
         if "pin_salt" not in columns:
             db.execute("ALTER TABLE personal_playlists ADD COLUMN pin_salt TEXT")
         indexes = db.execute("PRAGMA index_list(personal_playlists)").fetchall()
-        if any(row["unique"] and [col["name"] for col in db.execute("PRAGMA index_info(" + str(row["name"]).replace('"', '""').join(['"', '"']) + ")")] == ["device_id"] for row in indexes):
+        if any(row["unique"] and [col["name"] for col in db.execute("PRAGMA index_info(\"" + row["name"].replace('"', '""') + "\")")] == ["device_id"] for row in indexes):
             db.execute("""CREATE TABLE personal_playlists_new (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
