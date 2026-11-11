@@ -202,6 +202,24 @@ def initialize():
         );
         CREATE INDEX IF NOT EXISTS reseller_ledger_owner ON reseller_ledger(reseller_id,id);
         """)
+
+        # Legacy databases may already contain a resellers table with an older
+        # schema. CREATE TABLE IF NOT EXISTS does not upgrade those columns.
+        # Add only missing fields, preserving all existing accounts/credits.
+        reseller_columns = {row["name"] for row in db.execute("PRAGMA table_info(resellers)")}
+        if not {"id", "username"}.issubset(reseller_columns):
+            raise RuntimeError("Incompatible legacy resellers schema: id/username missing; backup and migrate manually")
+        reseller_migrations = {
+            "password_salt": "TEXT NOT NULL DEFAULT '00000000000000000000000000000000'",
+            "password_hash": "TEXT NOT NULL DEFAULT ''",
+            "enabled": "INTEGER NOT NULL DEFAULT 1",
+            "credits": "INTEGER NOT NULL DEFAULT 0",
+            "created_at": "TEXT NOT NULL DEFAULT ''",
+        }
+        for column, definition in reseller_migrations.items():
+            if column not in reseller_columns:
+                db.execute(f"ALTER TABLE resellers ADD COLUMN {column} {definition}")
+
         db.execute("""CREATE TABLE IF NOT EXISTS activation_offers (
             id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL,
             price TEXT NOT NULL, duration TEXT NOT NULL,
