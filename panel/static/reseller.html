@@ -1,1 +1,46 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SEGA PLAYER | فضاء الموزعين</title><link rel="stylesheet" href="/reseller/assets/reseller.css"><script defer src="/site/assets/theme.js"></script><script defer src="/reseller/assets/reseller.js"></script></head><body><header><strong>▶ SEGA PLAYER</strong><nav><a href="/">الرئيسية</a><button data-theme-toggle>تغيير المظهر</button></nav></header><main><h1>فضاء الموزعين</h1><p id="status" role="status">جارٍ تحميل حساب الموزع...</p><section class="cards"><article><small>الموزع</small><h2 id="username">—</h2></article><article><small>الرصيد (وحدات تفعيل)</small><h2 id="credits">—</h2></article><article><small>الأجهزة التابعة</small><h2 id="count">—</h2></article></section><section><h2>أجهزتي</h2><p>تفعيل رخصة المشغّل لمدة سنة يخصم وحدة واحدة من الرصيد. لا يتضمن محتوى IPTV.</p><div class="table"><table><thead><tr><th>الجهاز</th><th>MAC</th><th>الحالة</th><th>الانتهاء</th><th>الإجراء</th></tr></thead><tbody id="devices"></tbody></table></div></section><section><h2>سجل الرصيد والتفعيلات</h2><div class="table"><table><thead><tr><th>التاريخ</th><th>العملية</th><th>التغيير</th></tr></thead><tbody id="ledger"></tbody></table></div></section></main></body></html>
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SEGA PLAYER | فضاء الموزعين</title>
+  <link rel="stylesheet" href="/reseller/assets/reseller.css">
+  <script defer src="/site/assets/theme.js"></script>
+  <script defer src="/reseller/assets/reseller.js"></script>
+</head>
+<body>
+<header>
+  <strong>▶ SEGA PLAYER</strong>
+  <nav><a href="/">الرئيسية</a><button type="button" data-theme-toggle>تغيير المظهر</button></nav>
+</header>
+<main>
+  <h1>فضاء الموزعين</h1>
+  <p id="status" role="status" aria-live="polite">جارٍ تحميل حساب الموزع...</p>
+  <section class="cards">
+    <article><small>الموزع</small><h2 id="username">—</h2></article>
+    <article><small>الرصيد (وحدات تفعيل)</small><h2 id="credits">—</h2></article>
+    <article><small>الأجهزة التي فعلتها</small><h2 id="count">—</h2></article>
+  </section>
+  <section>
+    <h2>تفعيل جهاز عبر MAC</h2>
+    <p>دخل MAC ديال أي جهاز مسجل فـ SEGA PLAYER وما عندوش رخصة مدفوعة سارية. ما محتاجش ربط مسبق من المدير. يمكن ترقية الجهاز من التجربة المجانية.</p>
+    <form id="activate-form" class="activate-form">
+      <label for="mac">عنوان MAC ديال الجهاز
+        <input id="mac" name="mac" type="text" required maxlength="17" minlength="12" dir="ltr"
+               spellcheck="false" autocomplete="off" placeholder="AA:BB:CC:DD:EE:FF">
+      </label>
+      <button id="activate-button" type="submit">تفعيل سنة (خصم وحدة واحدة)</button>
+    </form>
+    <p class="hint">إذا ما تعرفش الجهاز، افتح تطبيق SEGA PLAYER فيه وخليه يسجّل فالنظام أولاً. الرخصة للمشغّل فقط ولا تشمل محتوى IPTV.</p>
+  </section>
+  <section>
+    <h2>الأجهزة التي فعلتها</h2>
+    <div class="table"><table><thead><tr><th>الجهاز</th><th>MAC</th><th>الحالة</th><th>تاريخ الانتهاء</th></tr></thead><tbody id="devices"></tbody></table></div>
+  </section>
+  <section>
+    <h2>سجل الرصيد والتفعيلات</h2>
+    <div class="table"><table><thead><tr><th>التاريخ</th><th>العملية</th><th>التغيير</th></tr></thead><tbody id="ledger"></tbody></table></div>
+  </section>
+</main>
+</body>
+</html>
