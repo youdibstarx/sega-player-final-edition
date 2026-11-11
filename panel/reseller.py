@@ -75,8 +75,12 @@ def install(app, database, admin_only, limiter, base, add_months, now_iso):
             try:
                 cur = db.execute("INSERT INTO resellers(username,password_salt,password_hash,created_at) VALUES(?,?,?,?)",
                                  (data.username,salt,digest,now_iso()))
-            except sqlite3.IntegrityError:
-                raise HTTPException(409, "Username already exists")
+            except sqlite3.IntegrityError as exc:
+                # Other legacy-schema constraints are NOT username collisions.
+                # Let unexpected database failures reach the server logs.
+                if "UNIQUE constraint failed: resellers.username" in str(exc):
+                    raise HTTPException(409, "Username already exists") from exc
+                raise
             return {"id": cur.lastrowid}
 
     @router.post("/admin/api/resellers/{reseller_id}/credits")
