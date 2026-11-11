@@ -37,6 +37,25 @@ async def invalid_input(request, exc):
     return JSONResponse({"detail": "Invalid request data"}, status_code=422)
 
 
+def same_origin(request: Request, origin: str) -> bool:
+    """Check CSRF Origin against the requested host, not the upstream ASGI URL.
+
+    Behind a TLS-terminating reverse proxy, request.base_url may use HTTP even
+    when the browser legitimately sends an HTTPS Origin.
+    """
+    from urllib.parse import urlsplit
+    try:
+        parsed = urlsplit(origin)
+    except ValueError:
+        return False
+    if (parsed.scheme not in {"http", "https"} or not parsed.netloc
+            or parsed.username or parsed.password
+            or parsed.path or parsed.query or parsed.fragment):
+        return False
+    requested_host = request.headers.get("host", "").lower()
+    return parsed.netloc.lower() == requested_host or origin == str(request.base_url).rstrip("/")
+
+
 @APP.middleware("http")
 async def security_headers(request: Request, call_next):
     try:
@@ -48,7 +67,7 @@ async def security_headers(request: Request, call_next):
                 if request.headers.get("X-Reseller-Request") != "1":
                     raise HTTPException(403, "Reseller request header required")
                 origin = request.headers.get("Origin")
-                if origin and origin != str(request.base_url).rstrip("/"):
+                if origin and not same_origin(request, origin):
                     raise HTTPException(403, "Cross-origin request rejected")
         if path.startswith("/portal/api/"):
             client = request.client.host if request.client else "unknown"
@@ -57,7 +76,7 @@ async def security_headers(request: Request, call_next):
                 if request.headers.get("X-Portal-Request") != "1":
                     raise HTTPException(403, "Portal request header required")
                 origin = request.headers.get("Origin")
-                if origin and origin != str(request.base_url).rstrip("/"):
+                if origin and not same_origin(request, origin):
                     raise HTTPException(403, "Cross-origin request rejected")
         if path.startswith(("/api/", "/admin", "/reseller")):
             # Only trust ASGI client set by a correctly configured reverse proxy.
@@ -70,7 +89,7 @@ async def security_headers(request: Request, call_next):
             if request.headers.get("X-Panel-Request") != "1":
                 raise HTTPException(403, "Panel request header required")
             origin = request.headers.get("Origin")
-            if origin and origin != str(request.base_url).rstrip("/"):
+            if origin and not same_origin(request, origin):
                 raise HTTPException(403, "Cross-origin request rejected")
         response = await call_next(request)
     except HTTPException as exc:
