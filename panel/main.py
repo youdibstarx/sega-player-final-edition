@@ -346,7 +346,7 @@ def admin_page(_: bool = Depends(admin_only)):
 
 @APP.get("/admin/assets/{file_name}")
 def admin_asset(file_name: str, _: bool = Depends(admin_only)):
-    if file_name not in {"app.css", "app.js"}:
+    if file_name not in {"app.css", "app.js", "offers-admin.js"}:
         raise HTTPException(404)
     return FileResponse(BASE / "static" / file_name)
 
@@ -477,7 +477,7 @@ def home_page():
 
 @APP.get("/site/assets/{file_name}")
 def site_asset(file_name: str):
-    if file_name not in {"site.css", "theme.js"}:
+    if file_name not in {"site.css", "theme.js", "offers.js"}:
         raise HTTPException(404)
     return FileResponse(BASE / "static" / file_name)
 
