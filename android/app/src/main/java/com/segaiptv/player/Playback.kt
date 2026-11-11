@@ -185,15 +185,21 @@ private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls
         onDispose { lifecycle.removeObserver(observer); stop() }
     }
     Box(modifier.background(Color.Black), contentAlignment = Alignment.Center) {
-        AndroidView(factory = { ctx -> PlayerView(ctx).apply {
-            useController = controls
-            setOnKeyListener { _, keyCode, event ->
-                if (controls && event.action == KeyEvent.ACTION_UP &&
-                    (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER)) {
-                    okCallback()
-                    true
-                } else false
+        AndroidView(factory = { ctx -> object : PlayerView(ctx) {
+            // Media3 may consume DPAD_CENTER before an OnKeyListener receives it.
+            // Intercept live TV OK before the player handles its controller keys.
+            override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+                val ok = event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                    event.keyCode == KeyEvent.KEYCODE_ENTER ||
+                    event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+                if (controls && channel != null && !isVod(channel) && ok) {
+                    if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) okCallback()
+                    return true
+                }
+                return super.dispatchKeyEvent(event)
             }
+        }.apply {
+            useController = controls
             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             controllerShowTimeoutMs = 3000
             controllerAutoShow = false
