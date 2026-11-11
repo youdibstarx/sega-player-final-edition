@@ -446,6 +446,17 @@ class PersonalPlaylistInput(PlaylistInput):
 
 
 @APP.get("/")
+def home_page():
+    return FileResponse(BASE / "static" / "site.html")
+
+
+@APP.get("/site/assets/{file_name}")
+def site_asset(file_name: str):
+    if file_name not in {"site.css", "theme.js"}:
+        raise HTTPException(404)
+    return FileResponse(BASE / "static" / file_name)
+
+
 @APP.get("/portal")
 def portal_page():
     return FileResponse(BASE / "static" / "portal.html")
