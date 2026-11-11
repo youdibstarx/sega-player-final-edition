@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 def install(app, database, admin_only, limiter, base, add_months, now_iso):
     router = APIRouter()
@@ -50,7 +50,15 @@ def install(app, database, admin_only, limiter, base, add_months, now_iso):
 
     class Activation(BaseModel):
         model_config = {"extra": "forbid"}
-        device_id: str = Field(min_length=1, max_length=80)
+        mac: str = Field(min_length=12, max_length=17)
+
+        @field_validator("mac")
+        @classmethod
+        def normalized_mac(cls, value):
+            raw = re.sub(r"[:-]", "", value.strip()).upper()
+            if not re.fullmatch(r"[0-9A-F]{12}", raw):
+                raise ValueError("Invalid MAC address")
+            return ":".join(raw[index:index + 2] for index in range(0, 12, 2))
 
     @router.get("/reseller")
     def reseller_page(_: dict = Depends(reseller)):
@@ -113,8 +121,10 @@ def install(app, database, admin_only, limiter, base, add_months, now_iso):
     @router.get("/reseller/api/state")
     def reseller_state(account: dict = Depends(reseller)):
         with database() as db:
-            devices = [dict(r) for r in db.execute("""SELECT d.id,d.mac_alias,d.label,d.active,d.expires_at
+            devices = [dict(r) for r in db.execute("""SELECT d.id,d.mac_alias,d.label,d.active,d.expires_at,
+                COALESCE(s.plan,'existing') AS plan
                 FROM devices d JOIN reseller_devices rd ON rd.device_id=d.id
+                LEFT JOIN subscriptions s ON s.device_id=d.id
                 WHERE rd.reseller_id=? ORDER BY d.last_seen DESC""",(account["id"],))]
             ledger = [dict(r) for r in db.execute("""SELECT id,delta,reason,created_at
                 FROM reseller_ledger WHERE reseller_id=? ORDER BY id DESC LIMIT 100""",(account["id"],))]
@@ -122,24 +132,51 @@ def install(app, database, admin_only, limiter, base, add_months, now_iso):
 
     @router.post("/reseller/api/activate")
     def reseller_activate(data: Activation, account: dict = Depends(reseller)):
+        """Activate a registered, unlicensed player by its MAC, without admin pre-assignment."""
         from datetime import timedelta
         with database() as db:
+            # Serialize the eligibility check and balance deduction to prevent
+            # double activation/double charges under concurrent requests.
             db.execute("BEGIN IMMEDIATE")
-            owner = db.execute("""SELECT d.id FROM devices d JOIN reseller_devices rd ON d.id=rd.device_id
-                WHERE d.id=? AND rd.reseller_id=?""",(data.device_id,account["id"])).fetchone()
-            if not owner:
-                raise HTTPException(404, "Device not assigned")
-            current = db.execute("SELECT credits,enabled FROM resellers WHERE id=?", (account["id"],)).fetchone()
-            if not current["enabled"] or current["credits"] < 1:
-                raise HTTPException(409, "Insufficient credits or disabled reseller")
+            devices = db.execute("""SELECT d.id,d.active,d.expires_at,
+                COALESCE(s.plan,'existing') AS plan
+                FROM devices d LEFT JOIN subscriptions s ON s.device_id=d.id
+                WHERE d.mac_alias=? COLLATE NOCASE""", (data.mac,)).fetchall()
+            if not devices:
+                raise HTTPException(404, "MAC not registered. Open SEGA PLAYER on this device first.")
+            if len(devices) != 1:
+                raise HTTPException(409, "Multiple devices registered with this MAC; contact admin.")
+
+            device = devices[0]
             today = datetime.now(timezone.utc).date()
-            expiry = (add_months(today,12)-timedelta(days=1)).isoformat()
-            db.execute("UPDATE resellers SET credits=credits-1 WHERE id=?", (account["id"],))
-            db.execute("UPDATE devices SET active=1,expires_at=? WHERE id=?", (expiry,data.device_id))
+            # An active free trial can be upgraded; an active paid/lifetime
+            # license must not be charged again. Expired licenses are renewable.
+            license_current = bool(device["active"]) and (
+                device["expires_at"] is None or device["expires_at"] >= today.isoformat()
+            )
+            if license_current and device["plan"] != "trial":
+                raise HTTPException(409, "This MAC already has an active license.")
+
+            debit = db.execute("""UPDATE resellers SET credits=credits-1
+                WHERE id=? AND enabled=1 AND credits>=1""", (account["id"],))
+            if debit.rowcount != 1:
+                raise HTTPException(409, "Insufficient reseller credits or disabled account.")
+
+            expiry = (add_months(today, 12) - timedelta(days=1)).isoformat()
+            db.execute("""INSERT INTO reseller_devices(reseller_id,device_id) VALUES(?,?)
+                ON CONFLICT(device_id) DO UPDATE SET reseller_id=excluded.reseller_id""",
+                (account["id"], device["id"]))
+            db.execute("UPDATE devices SET active=1,expires_at=? WHERE id=?",
+                       (expiry, device["id"]))
             db.execute("""INSERT INTO subscriptions(device_id,trial_used,plan) VALUES(?,1,'year')
-                ON CONFLICT(device_id) DO UPDATE SET trial_used=1,plan='year'""",(data.device_id,))
-            db.execute("INSERT INTO reseller_ledger(reseller_id,device_id,delta,reason,created_at) VALUES(?,?,-1,?,?)",
-                       (account["id"],data.device_id,"12-month player license",now_iso()))
-            return {"activated":True,"expires_at":expiry,"credits":current["credits"]-1}
+                ON CONFLICT(device_id) DO UPDATE SET trial_used=1,plan='year'""",
+                (device["id"],))
+            db.execute("""INSERT INTO reseller_ledger(reseller_id,device_id,delta,reason,created_at)
+                VALUES(?,?,-1,?,?)""",
+                (account["id"], device["id"], "12-month license: " + data.mac, now_iso()))
+            balance = db.execute("SELECT credits FROM resellers WHERE id=?",
+                                 (account["id"],)).fetchone()["credits"]
+            return {"activated": True, "mac": data.mac, "expires_at": expiry,
+                    "credits": balance}
 
     app.include_router(router)
