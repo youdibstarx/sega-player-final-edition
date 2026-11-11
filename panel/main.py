@@ -41,7 +41,16 @@ async def invalid_input(request, exc):
 async def security_headers(request: Request, call_next):
     try:
         path = request.url.path
-        if path.startswith("/reseller/api/"):\n            client = request.client.host if request.client else "unknown"\n            await run_in_threadpool(limiter.check, "reseller-ip", client, 60)\n            if request.method not in {"GET", "HEAD", "OPTIONS"}:\n                if request.headers.get("X-Reseller-Request") != "1":\n                    raise HTTPException(403, "Reseller request header required")\n                origin = request.headers.get("Origin")\n                if origin and origin != str(request.base_url).rstrip("/"):\n                    raise HTTPException(403, "Cross-origin request rejected")\n        if path.startswith("/portal/api/"):
+        if path.startswith("/reseller/api/"):
+            client = request.client.host if request.client else "unknown"
+            await run_in_threadpool(limiter.check, "reseller-ip", client, 60)
+            if request.method not in {"GET", "HEAD", "OPTIONS"}:
+                if request.headers.get("X-Reseller-Request") != "1":
+                    raise HTTPException(403, "Reseller request header required")
+                origin = request.headers.get("Origin")
+                if origin and origin != str(request.base_url).rstrip("/"):
+                    raise HTTPException(403, "Cross-origin request rejected")
+        if path.startswith("/portal/api/"):
             client = request.client.host if request.client else "unknown"
             await run_in_threadpool(limiter.check, "portal-ip", client, 60)
             if request.method not in {"GET", "HEAD", "OPTIONS"}:
@@ -157,7 +166,24 @@ def initialize():
             db.execute("DROP TABLE personal_playlists")
             db.execute("ALTER TABLE personal_playlists_new RENAME TO personal_playlists")
         db.execute("CREATE INDEX IF NOT EXISTS personal_playlists_device ON personal_playlists(device_id)")
-        db.executescript("""CREATE TABLE IF NOT EXISTS resellers (\n            id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE,\n            password_salt TEXT NOT NULL, password_hash TEXT NOT NULL,\n            enabled INTEGER NOT NULL DEFAULT 1, credits INTEGER NOT NULL DEFAULT 0 CHECK(credits>=0),\n            created_at TEXT NOT NULL\n        );\n        CREATE TABLE IF NOT EXISTS reseller_devices (\n            reseller_id INTEGER NOT NULL REFERENCES resellers(id) ON DELETE CASCADE,\n            device_id TEXT NOT NULL UNIQUE REFERENCES devices(id) ON DELETE CASCADE,\n            PRIMARY KEY(reseller_id,device_id)\n        );\n        CREATE TABLE IF NOT EXISTS reseller_ledger (\n            id INTEGER PRIMARY KEY AUTOINCREMENT, reseller_id INTEGER NOT NULL REFERENCES resellers(id),\n            device_id TEXT, delta INTEGER NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL\n        );\n        CREATE INDEX IF NOT EXISTS reseller_ledger_owner ON reseller_ledger(reseller_id,id);\n        """)\n        db.execute("""CREATE TABLE IF NOT EXISTS activation_offers (
+        db.executescript("""CREATE TABLE IF NOT EXISTS resellers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE,
+            password_salt TEXT NOT NULL, password_hash TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1, credits INTEGER NOT NULL DEFAULT 0 CHECK(credits>=0),
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS reseller_devices (
+            reseller_id INTEGER NOT NULL REFERENCES resellers(id) ON DELETE CASCADE,
+            device_id TEXT NOT NULL UNIQUE REFERENCES devices(id) ON DELETE CASCADE,
+            PRIMARY KEY(reseller_id,device_id)
+        );
+        CREATE TABLE IF NOT EXISTS reseller_ledger (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, reseller_id INTEGER NOT NULL REFERENCES resellers(id),
+            device_id TEXT, delta INTEGER NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS reseller_ledger_owner ON reseller_ledger(reseller_id,id);
+        """)
+        db.execute("""CREATE TABLE IF NOT EXISTS activation_offers (
             id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL,
             price TEXT NOT NULL, duration TEXT NOT NULL,
             published INTEGER NOT NULL DEFAULT 0
@@ -675,7 +701,9 @@ def admin_remove_offer(offer_id: int, _: bool = Depends(admin_only)):
 def health():
     return {"status": "ok"}
 
-install_reseller(APP, database, admin_only, limiter, BASE, add_months, now_iso)\n\napp = APP
+install_reseller(APP, database, admin_only, limiter, BASE, add_months, now_iso)
+
+app = APP
 
 
 
