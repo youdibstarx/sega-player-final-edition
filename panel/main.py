@@ -137,6 +137,31 @@ def initialize():
             (1, 'SEGA IPTV Player', '#E5474C', '', '');
         """)
 
+        # Upgrade legacy single-playlist storage in place without losing entries.
+        columns = {r["name"] for r in db.execute("PRAGMA table_info(personal_playlists)")}
+        if "pin_hash" not in columns:
+            db.execute("ALTER TABLE personal_playlists ADD COLUMN pin_hash TEXT")
+        if "pin_salt" not in columns:
+            db.execute("ALTER TABLE personal_playlists ADD COLUMN pin_salt TEXT")
+        indexes = db.execute("PRAGMA index_list(personal_playlists)").fetchall()
+        if any(row["unique"] and [col["name"] for col in db.execute("PRAGMA index_info(" + str(row["name"]).replace('"', '""').join(['"', '"']) + ")")] == ["device_id"] for row in indexes):
+            db.execute("""CREATE TABLE personal_playlists_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+                name TEXT NOT NULL, url TEXT NOT NULL,
+                pin_hash TEXT, pin_salt TEXT
+            )""")
+            db.execute("""INSERT INTO personal_playlists_new(id,device_id,name,url,pin_hash,pin_salt)
+                SELECT id,device_id,name,url,pin_hash,pin_salt FROM personal_playlists""")
+            db.execute("DROP TABLE personal_playlists")
+            db.execute("ALTER TABLE personal_playlists_new RENAME TO personal_playlists")
+        db.execute("CREATE INDEX IF NOT EXISTS personal_playlists_device ON personal_playlists(device_id)")
+        db.execute("""CREATE TABLE IF NOT EXISTS activation_offers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL,
+            price TEXT NOT NULL, duration TEXT NOT NULL,
+            published INTEGER NOT NULL DEFAULT 0
+        )""")
+
 
 initialize()
 
@@ -469,29 +494,179 @@ def portal_asset(file_name: str):
     return FileResponse(BASE / "static" / file_name)
 
 
+class PersonalPlaylistCreate(BaseModel):
+    model_config = {"extra": "forbid"}
+    name: str = Field(min_length=1, max_length=100)
+    url: str = Field(min_length=8, max_length=3000)
+    pin: Optional[str] = Field(default=None, pattern=r"^[0-9]{4,8}$")
+
+    @field_validator("url")
+    @classmethod
+    def check_url(cls, value):
+        return PlaylistInput.validate_url(value)
+
+
+class PersonalPlaylistUpdate(PersonalPlaylistCreate):
+    current_pin: Optional[str] = Field(default=None, pattern=r"^[0-9]{4,8}$")
+    remove_pin: bool = False
+
+
+class PinCheck(BaseModel):
+    pin: str = Field(pattern=r"^[0-9]{4,8}$")
+
+
+def pin_digest(pin, salt):
+    return hashlib.pbkdf2_hmac("sha256", pin.encode(), bytes.fromhex(salt), 250000).hex()
+
+
+def pin_fields(pin):
+    if pin is None:
+        return None, None
+    salt = os.urandom(16).hex()
+    return pin_digest(pin, salt), salt
+
+
+def playlist_view(row):
+    return {"id": row["id"], "name": row["name"], "url": row["url"],
+            "pin_enabled": bool(row["pin_hash"])}
+
+
+def require_playlist(db, device_id, playlist_id):
+    row = db.execute("SELECT * FROM personal_playlists WHERE device_id=? AND id=?",
+                     (device_id, playlist_id)).fetchone()
+    if row is None:
+        raise HTTPException(404, "Playlist not found")
+    return row
+
+
+def check_existing_pin(row, pin):
+    if row["pin_hash"] and (not pin or not hmac.compare_digest(
+            row["pin_hash"], pin_digest(pin, row["pin_salt"]))):
+        raise HTTPException(403, "Invalid playlist PIN")
+
+
 @APP.get("/portal/api/account")
 def portal_account(device=Depends(portal_device)):
     with database() as db:
-        playlist = db.execute("SELECT name,url FROM personal_playlists WHERE device_id=?", (device["id"],)).fetchone()
+        playlists = db.execute("SELECT * FROM personal_playlists WHERE device_id=? ORDER BY id",
+                               (device["id"],)).fetchall()
         subscription = db.execute("SELECT plan FROM subscriptions WHERE device_id=?", (device["id"],)).fetchone()
     return {"active": enabled_device(device), "expires_at": device["expires_at"],
             "plan": subscription["plan"] if subscription else "existing",
-            "playlist": dict(playlist) if playlist else None}
+            "playlist": {"name": playlists[0]["name"], "url": playlists[0]["url"]} if playlists else None,
+            "playlists": [playlist_view(row) for row in playlists]}
 
 
+# Legacy endpoint retained for existing clients. Changes only the oldest list.
 @APP.put("/portal/api/playlist")
 def portal_save(payload: PersonalPlaylistInput, device=Depends(portal_device)):
     with database() as db:
-        db.execute("""INSERT INTO personal_playlists(device_id,name,url) VALUES(?,?,?)
-            ON CONFLICT(device_id) DO UPDATE SET name=excluded.name,url=excluded.url""",
-            (device["id"], payload.name.strip(), payload.url.strip()))
+        row = db.execute("SELECT id,pin_hash FROM personal_playlists WHERE device_id=? ORDER BY id LIMIT 1",
+                         (device["id"],)).fetchone()
+        if row:
+            if row["pin_hash"]:
+                raise HTTPException(403, "PIN-protected playlist: use the new endpoint")
+            db.execute("UPDATE personal_playlists SET name=?,url=? WHERE id=?",
+                       (payload.name.strip(), payload.url.strip(), row["id"]))
+        else:
+            db.execute("INSERT INTO personal_playlists(device_id,name,url) VALUES(?,?,?)",
+                       (device["id"], payload.name.strip(), payload.url.strip()))
     return {"saved": True}
 
 
 @APP.delete("/portal/api/playlist")
 def portal_delete(device=Depends(portal_device)):
     with database() as db:
-        db.execute("DELETE FROM personal_playlists WHERE device_id=?", (device["id"],))
+        row = db.execute("SELECT id,pin_hash FROM personal_playlists WHERE device_id=? ORDER BY id LIMIT 1",
+                         (device["id"],)).fetchone()
+        if row:
+            if row["pin_hash"]:
+                raise HTTPException(403, "PIN-protected playlist: use the new endpoint")
+            db.execute("DELETE FROM personal_playlists WHERE id=?", (row["id"],))
+    return {"deleted": True}
+
+
+@APP.post("/portal/api/playlists")
+def portal_add(payload: PersonalPlaylistCreate, device=Depends(portal_device)):
+    digest, salt = pin_fields(payload.pin)
+    with database() as db:
+        count = db.execute("SELECT COUNT(*) FROM personal_playlists WHERE device_id=?",
+                           (device["id"],)).fetchone()[0]
+        if count >= 25:
+            raise HTTPException(400, "Playlist limit reached")
+        cur = db.execute("""INSERT INTO personal_playlists(device_id,name,url,pin_hash,pin_salt)
+                            VALUES(?,?,?,?,?)""",
+                         (device["id"], payload.name.strip(), payload.url.strip(), digest, salt))
+    return {"id": cur.lastrowid}
+
+
+@APP.put("/portal/api/playlists/{playlist_id}")
+def portal_update(playlist_id: int, payload: PersonalPlaylistUpdate, device=Depends(portal_device)):
+    if payload.remove_pin and payload.pin:
+        raise HTTPException(422, "Cannot set and remove PIN together")
+    with database() as db:
+        row = require_playlist(db, device["id"], playlist_id)
+        check_existing_pin(row, payload.current_pin)
+        digest, salt = (None, None) if payload.remove_pin else (
+            pin_fields(payload.pin) if payload.pin else (row["pin_hash"], row["pin_salt"]))
+        db.execute("""UPDATE personal_playlists SET name=?,url=?,pin_hash=?,pin_salt=? WHERE id=?""",
+                   (payload.name.strip(), payload.url.strip(), digest, salt, playlist_id))
+    return {"saved": True}
+
+
+@APP.delete("/portal/api/playlists/{playlist_id}")
+def portal_remove(playlist_id: int, payload: Optional[PinCheck] = None,
+                  device=Depends(portal_device)):
+    with database() as db:
+        row = require_playlist(db, device["id"], playlist_id)
+        check_existing_pin(row, payload.pin if payload else None)
+        db.execute("DELETE FROM personal_playlists WHERE id=?", (playlist_id,))
+    return {"deleted": True}
+
+
+class OfferInput(BaseModel):
+    model_config = {"extra": "forbid"}
+    title: str = Field(min_length=1, max_length=100)
+    price: str = Field(min_length=1, max_length=60)
+    duration: str = Field(min_length=1, max_length=100)
+    published: bool = False
+
+
+@APP.get("/api/public/offers")
+def public_offers():
+    with database() as db:
+        return {"offers": [dict(r) for r in db.execute(
+            "SELECT id,title,price,duration FROM activation_offers WHERE published=1 ORDER BY id")]}
+
+
+@APP.get("/admin/api/offers")
+def admin_offers(_: bool = Depends(admin_only)):
+    with database() as db:
+        return {"offers": [dict(r) for r in db.execute("SELECT * FROM activation_offers ORDER BY id")]}
+
+
+@APP.post("/admin/api/offers")
+def admin_add_offer(payload: OfferInput, _: bool = Depends(admin_only)):
+    with database() as db:
+        cur = db.execute("INSERT INTO activation_offers(title,price,duration,published) VALUES(?,?,?,?)",
+                         (payload.title.strip(), payload.price.strip(), payload.duration.strip(), int(payload.published)))
+    return {"id": cur.lastrowid}
+
+
+@APP.put("/admin/api/offers/{offer_id}")
+def admin_edit_offer(offer_id: int, payload: OfferInput, _: bool = Depends(admin_only)):
+    with database() as db:
+        cur = db.execute("UPDATE activation_offers SET title=?,price=?,duration=?,published=? WHERE id=?",
+                         (payload.title.strip(), payload.price.strip(), payload.duration.strip(), int(payload.published), offer_id))
+        if not cur.rowcount:
+            raise HTTPException(404, "Offer not found")
+    return {"saved": True}
+
+
+@APP.delete("/admin/api/offers/{offer_id}")
+def admin_remove_offer(offer_id: int, _: bool = Depends(admin_only)):
+    with database() as db:
+        db.execute("DELETE FROM activation_offers WHERE id=?", (offer_id,))
     return {"deleted": True}
 
 
