@@ -27,14 +27,8 @@ class ResellerTests(unittest.TestCase):
             "X-Panel-Request": "1",
             "Authorization": "Basic " + base64.b64encode(b"qa:test").decode(),
         }
-        self.r1 = {
-            "Authorization": "Basic " + base64.b64encode(b"dealer1:strong-password-1").decode(),
-            "X-Reseller-Request": "1",
-        }
-        self.r2 = {
-            "Authorization": "Basic " + base64.b64encode(b"dealer2:strong-password-2").decode(),
-            "X-Reseller-Request": "1",
-        }
+        self.r1 = None
+        self.r2 = None
         self.device = self.register_device("12:23:34:45:56:67")
 
     def register_device(self, mac):
@@ -56,10 +50,22 @@ class ResellerTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()["id"]
 
+    def login(self, username, password):
+        response = self.c.post("/reseller/api/login", headers={"X-Reseller-Request": "1"},
+                               json={"username": username, "password": password})
+        self.assertEqual(response.status_code, 200, response.text)
+        token = response.cookies.get("sega_reseller_session")
+        self.assertTrue(token)
+        self.assertIn("httponly", response.headers["set-cookie"].lower())
+        self.c.cookies.clear()
+        return {"X-Reseller-Request": "1", "Cookie": "sega_reseller_session=" + token}
+
     def test_any_registered_unlicensed_mac_without_admin_assignment(self):
         one = self.create("dealer1", "strong-password-1")
         self.create("dealer2", "strong-password-2")
         self.assertEqual(self.c.get("/reseller/api/state").status_code, 401)
+        self.r1 = self.login("dealer1", "strong-password-1")
+        self.r2 = self.login("dealer2", "strong-password-2")
         self.assertEqual(self.c.get("/reseller/api/state", headers=self.r1).json()["devices"], [])
 
         # No admin assignment required. A registered device may have an active
