@@ -112,10 +112,36 @@ class ResellerTests(unittest.TestCase):
         self.assertEqual(self.c.post("/admin/api/resellers", headers=self.admin,
                                      json={"username": "dealer1",
                                            "password": "strong-password-1"}).status_code, 409)
-        bad = {"Authorization": "Basic " +
-               base64.b64encode(b"dealer1:wrong-password").decode()}
-        self.assertEqual(self.c.get("/reseller/api/state", headers=bad).status_code, 401)
+        denied = self.c.post("/reseller/api/login", headers={"X-Reseller-Request": "1"},
+                             json={"username": "dealer1", "password": "wrong-password"})
+        self.assertEqual(denied.status_code, 401)
+        self.assertNotIn("set-cookie", denied.headers)
+        self.r1 = self.login("dealer1", "strong-password-1")
         self.assertEqual(self.c.get("/admin/api/resellers", headers=self.r1).status_code, 401)
+
+    def test_login_page_logout_and_mac_fields(self):
+        self.create("dealer1", "strong-password-1")
+        page = self.c.get("/reseller/login")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('id="login-form"', page.text)
+        self.assertEqual(self.c.get("/reseller", follow_redirects=False).status_code, 303)
+        self.assertEqual(self.c.get("/reseller/assets/reseller-login.js").status_code, 200)
+        self.assertEqual(self.c.get("/reseller/assets/reseller.js").status_code, 401)
+        denied = self.c.post("/reseller/api/login",
+                             json={"username": "dealer1", "password": "strong-password-1"})
+        self.assertEqual(denied.status_code, 403)
+        session = self.login("dealer1", "strong-password-1")
+        content = self.c.get("/reseller", headers=session)
+        self.assertEqual(content.status_code, 200)
+        self.assertIn("data-mac-input", content.text)
+        self.assertIn('id="logout"', content.text)
+        self.assertEqual(self.c.get("/reseller/api/state", headers=session).status_code, 200)
+        self.assertIn("data-mac-input", self.c.get("/portal").text)
+        self.assertIn("data-mac-input", self.c.get("/site/assets/theme.js").text)
+        done = self.c.post("/reseller/api/logout", headers=session)
+        self.assertEqual(done.status_code, 200)
+        self.assertEqual(self.c.get("/reseller/api/state", headers=session).status_code, 401)
+
 
 
 if __name__ == "__main__":
