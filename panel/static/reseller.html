@@ -11,7 +11,7 @@
 <body>
 <header>
   <strong>▶ SEGA PLAYER</strong>
-  <nav><a href="/">الرئيسية</a><button type="button" data-theme-toggle>تغيير المظهر</button></nav>
+  <nav><a href="/">الرئيسية</a><button type="button" data-theme-toggle>تغيير المظهر</button><button type="button" id="logout" class="secondary">تسجيل الخروج</button></nav>
 </header>
 <main>
   <h1>فضاء الموزعين</h1>
@@ -26,7 +26,7 @@
     <p>دخل MAC ديال أي جهاز مسجل فـ SEGA PLAYER وما عندوش رخصة مدفوعة سارية. ما محتاجش ربط مسبق من المدير. يمكن ترقية الجهاز من التجربة المجانية.</p>
     <form id="activate-form" class="activate-form">
       <label for="mac">عنوان MAC ديال الجهاز
-        <input id="mac" name="mac" type="text" required maxlength="17" minlength="12" dir="ltr"
+        <input id="mac" name="mac" type="text" required maxlength="17" minlength="12" dir="ltr" data-mac-input
                spellcheck="false" autocomplete="off" placeholder="AA:BB:CC:DD:EE:FF">
       </label>
       <button id="activate-button" type="submit">تفعيل سنة (خصم وحدة واحدة)</button>
