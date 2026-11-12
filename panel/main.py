@@ -16,6 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.concurrency import run_in_threadpool
 from security import RateLimiter
 from proof import DeviceProofs
+from reseller import install as install_reseller
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field, field_validator
 
@@ -36,10 +37,38 @@ async def invalid_input(request, exc):
     return JSONResponse({"detail": "Invalid request data"}, status_code=422)
 
 
+def same_origin(request: Request, origin: str) -> bool:
+    """Check CSRF Origin against the requested host, not the upstream ASGI URL.
+
+    Behind a TLS-terminating reverse proxy, request.base_url may use HTTP even
+    when the browser legitimately sends an HTTPS Origin.
+    """
+    from urllib.parse import urlsplit
+    try:
+        parsed = urlsplit(origin)
+    except ValueError:
+        return False
+    if (parsed.scheme not in {"http", "https"} or not parsed.netloc
+            or parsed.username or parsed.password
+            or parsed.path or parsed.query or parsed.fragment):
+        return False
+    requested_host = request.headers.get("host", "").lower()
+    return parsed.netloc.lower() == requested_host or origin == str(request.base_url).rstrip("/")
+
+
 @APP.middleware("http")
 async def security_headers(request: Request, call_next):
     try:
         path = request.url.path
+        if path.startswith("/reseller/api/"):
+            client = request.client.host if request.client else "unknown"
+            await run_in_threadpool(limiter.check, "reseller-ip", client, 60)
+            if request.method not in {"GET", "HEAD", "OPTIONS"}:
+                if request.headers.get("X-Reseller-Request") != "1":
+                    raise HTTPException(403, "Reseller request header required")
+                origin = request.headers.get("Origin")
+                if origin and not same_origin(request, origin):
+                    raise HTTPException(403, "Cross-origin request rejected")
         if path.startswith("/portal/api/"):
             client = request.client.host if request.client else "unknown"
             await run_in_threadpool(limiter.check, "portal-ip", client, 60)
@@ -47,9 +76,9 @@ async def security_headers(request: Request, call_next):
                 if request.headers.get("X-Portal-Request") != "1":
                     raise HTTPException(403, "Portal request header required")
                 origin = request.headers.get("Origin")
-                if origin and origin != str(request.base_url).rstrip("/"):
+                if origin and not same_origin(request, origin):
                     raise HTTPException(403, "Cross-origin request rejected")
-        if path.startswith(("/api/", "/admin")):
+        if path.startswith(("/api/", "/admin", "/reseller")):
             # Only trust ASGI client set by a correctly configured reverse proxy.
             # Never read an arbitrary X-Forwarded-For header here.
             client = request.client.host if request.client else "unknown"
@@ -60,7 +89,7 @@ async def security_headers(request: Request, call_next):
             if request.headers.get("X-Panel-Request") != "1":
                 raise HTTPException(403, "Panel request header required")
             origin = request.headers.get("Origin")
-            if origin and origin != str(request.base_url).rstrip("/"):
+            if origin and not same_origin(request, origin):
                 raise HTTPException(403, "Cross-origin request rejected")
         response = await call_next(request)
     except HTTPException as exc:
@@ -136,6 +165,66 @@ def initialize():
         INSERT OR IGNORE INTO settings VALUES
             (1, 'SEGA IPTV Player', '#E5474C', '', '');
         """)
+
+        # Upgrade legacy single-playlist storage in place without losing entries.
+        columns = {r["name"] for r in db.execute("PRAGMA table_info(personal_playlists)")}
+        if "pin_hash" not in columns:
+            db.execute("ALTER TABLE personal_playlists ADD COLUMN pin_hash TEXT")
+        if "pin_salt" not in columns:
+            db.execute("ALTER TABLE personal_playlists ADD COLUMN pin_salt TEXT")
+        indexes = db.execute("PRAGMA index_list(personal_playlists)").fetchall()
+        if any(row["unique"] and [col["name"] for col in db.execute("PRAGMA index_info(\"" + row["name"].replace('"', '""') + "\")")] == ["device_id"] for row in indexes):
+            db.execute("""CREATE TABLE personal_playlists_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+                name TEXT NOT NULL, url TEXT NOT NULL,
+                pin_hash TEXT, pin_salt TEXT
+            )""")
+            db.execute("""INSERT INTO personal_playlists_new(id,device_id,name,url,pin_hash,pin_salt)
+                SELECT id,device_id,name,url,pin_hash,pin_salt FROM personal_playlists""")
+            db.execute("DROP TABLE personal_playlists")
+            db.execute("ALTER TABLE personal_playlists_new RENAME TO personal_playlists")
+        db.execute("CREATE INDEX IF NOT EXISTS personal_playlists_device ON personal_playlists(device_id)")
+        db.executescript("""CREATE TABLE IF NOT EXISTS resellers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE,
+            password_salt TEXT NOT NULL, password_hash TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1, credits INTEGER NOT NULL DEFAULT 0 CHECK(credits>=0),
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS reseller_devices (
+            reseller_id INTEGER NOT NULL REFERENCES resellers(id) ON DELETE CASCADE,
+            device_id TEXT NOT NULL UNIQUE REFERENCES devices(id) ON DELETE CASCADE,
+            PRIMARY KEY(reseller_id,device_id)
+        );
+        CREATE TABLE IF NOT EXISTS reseller_ledger (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, reseller_id INTEGER NOT NULL REFERENCES resellers(id),
+            device_id TEXT, delta INTEGER NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS reseller_ledger_owner ON reseller_ledger(reseller_id,id);
+        """)
+
+        # Legacy databases may already contain a resellers table with an older
+        # schema. CREATE TABLE IF NOT EXISTS does not upgrade those columns.
+        # Add only missing fields, preserving all existing accounts/credits.
+        reseller_columns = {row["name"] for row in db.execute("PRAGMA table_info(resellers)")}
+        if not {"id", "username"}.issubset(reseller_columns):
+            raise RuntimeError("Incompatible legacy resellers schema: id/username missing; backup and migrate manually")
+        reseller_migrations = {
+            "password_salt": "TEXT NOT NULL DEFAULT '00000000000000000000000000000000'",
+            "password_hash": "TEXT NOT NULL DEFAULT ''",
+            "enabled": "INTEGER NOT NULL DEFAULT 1",
+            "credits": "INTEGER NOT NULL DEFAULT 0",
+            "created_at": "TEXT NOT NULL DEFAULT ''",
+        }
+        for column, definition in reseller_migrations.items():
+            if column not in reseller_columns:
+                db.execute(f"ALTER TABLE resellers ADD COLUMN {column} {definition}")
+
+        db.execute("""CREATE TABLE IF NOT EXISTS activation_offers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL,
+            price TEXT NOT NULL, duration TEXT NOT NULL,
+            published INTEGER NOT NULL DEFAULT 0
+        )""")
 
 
 initialize()
@@ -321,7 +410,7 @@ def admin_page(_: bool = Depends(admin_only)):
 
 @APP.get("/admin/assets/{file_name}")
 def admin_asset(file_name: str, _: bool = Depends(admin_only)):
-    if file_name not in {"app.css", "app.js"}:
+    if file_name not in {"app.css", "app.js", "offers-admin.js", "resellers-admin.js"}:
         raise HTTPException(404)
     return FileResponse(BASE / "static" / file_name)
 
@@ -446,6 +535,17 @@ class PersonalPlaylistInput(PlaylistInput):
 
 
 @APP.get("/")
+def home_page():
+    return FileResponse(BASE / "static" / "site.html")
+
+
+@APP.get("/site/assets/{file_name}")
+def site_asset(file_name: str):
+    if file_name not in {"site.css", "theme.js", "offers.js"}:
+        raise HTTPException(404)
+    return FileResponse(BASE / "static" / file_name)
+
+
 @APP.get("/portal")
 def portal_page():
     return FileResponse(BASE / "static" / "portal.html")
@@ -458,35 +558,187 @@ def portal_asset(file_name: str):
     return FileResponse(BASE / "static" / file_name)
 
 
+class PersonalPlaylistCreate(BaseModel):
+    model_config = {"extra": "forbid"}
+    name: str = Field(min_length=1, max_length=100)
+    url: str = Field(min_length=8, max_length=3000)
+    pin: Optional[str] = Field(default=None, pattern=r"^[0-9]{4,8}$")
+
+    @field_validator("url")
+    @classmethod
+    def check_url(cls, value):
+        return PlaylistInput.validate_url(value)
+
+
+class PersonalPlaylistUpdate(PersonalPlaylistCreate):
+    current_pin: Optional[str] = Field(default=None, pattern=r"^[0-9]{4,8}$")
+    remove_pin: bool = False
+
+
+class PinCheck(BaseModel):
+    pin: str = Field(pattern=r"^[0-9]{4,8}$")
+
+
+def pin_digest(pin, salt):
+    return hashlib.pbkdf2_hmac("sha256", pin.encode(), bytes.fromhex(salt), 250000).hex()
+
+
+def pin_fields(pin):
+    if pin is None:
+        return None, None
+    salt = os.urandom(16).hex()
+    return pin_digest(pin, salt), salt
+
+
+def playlist_view(row):
+    return {"id": row["id"], "name": row["name"], "url": row["url"],
+            "pin_enabled": bool(row["pin_hash"])}
+
+
+def require_playlist(db, device_id, playlist_id):
+    row = db.execute("SELECT * FROM personal_playlists WHERE device_id=? AND id=?",
+                     (device_id, playlist_id)).fetchone()
+    if row is None:
+        raise HTTPException(404, "Playlist not found")
+    return row
+
+
+def check_existing_pin(row, pin):
+    if row["pin_hash"] and (not pin or not hmac.compare_digest(
+            row["pin_hash"], pin_digest(pin, row["pin_salt"]))):
+        raise HTTPException(403, "Invalid playlist PIN")
+
+
 @APP.get("/portal/api/account")
 def portal_account(device=Depends(portal_device)):
     with database() as db:
-        playlist = db.execute("SELECT name,url FROM personal_playlists WHERE device_id=?", (device["id"],)).fetchone()
+        playlists = db.execute("SELECT * FROM personal_playlists WHERE device_id=? ORDER BY id",
+                               (device["id"],)).fetchall()
         subscription = db.execute("SELECT plan FROM subscriptions WHERE device_id=?", (device["id"],)).fetchone()
     return {"active": enabled_device(device), "expires_at": device["expires_at"],
             "plan": subscription["plan"] if subscription else "existing",
-            "playlist": dict(playlist) if playlist else None}
+            "playlist": {"name": playlists[0]["name"], "url": playlists[0]["url"]} if playlists else None,
+            "playlists": [playlist_view(row) for row in playlists]}
 
 
+# Legacy endpoint retained for existing clients. Changes only the oldest list.
 @APP.put("/portal/api/playlist")
 def portal_save(payload: PersonalPlaylistInput, device=Depends(portal_device)):
     with database() as db:
-        db.execute("""INSERT INTO personal_playlists(device_id,name,url) VALUES(?,?,?)
-            ON CONFLICT(device_id) DO UPDATE SET name=excluded.name,url=excluded.url""",
-            (device["id"], payload.name.strip(), payload.url.strip()))
+        row = db.execute("SELECT id,pin_hash FROM personal_playlists WHERE device_id=? ORDER BY id LIMIT 1",
+                         (device["id"],)).fetchone()
+        if row:
+            if row["pin_hash"]:
+                raise HTTPException(403, "PIN-protected playlist: use the new endpoint")
+            db.execute("UPDATE personal_playlists SET name=?,url=? WHERE id=?",
+                       (payload.name.strip(), payload.url.strip(), row["id"]))
+        else:
+            db.execute("INSERT INTO personal_playlists(device_id,name,url) VALUES(?,?,?)",
+                       (device["id"], payload.name.strip(), payload.url.strip()))
     return {"saved": True}
 
 
 @APP.delete("/portal/api/playlist")
 def portal_delete(device=Depends(portal_device)):
     with database() as db:
-        db.execute("DELETE FROM personal_playlists WHERE device_id=?", (device["id"],))
+        row = db.execute("SELECT id,pin_hash FROM personal_playlists WHERE device_id=? ORDER BY id LIMIT 1",
+                         (device["id"],)).fetchone()
+        if row:
+            if row["pin_hash"]:
+                raise HTTPException(403, "PIN-protected playlist: use the new endpoint")
+            db.execute("DELETE FROM personal_playlists WHERE id=?", (row["id"],))
+    return {"deleted": True}
+
+
+@APP.post("/portal/api/playlists")
+def portal_add(payload: PersonalPlaylistCreate, device=Depends(portal_device)):
+    digest, salt = pin_fields(payload.pin)
+    with database() as db:
+        count = db.execute("SELECT COUNT(*) FROM personal_playlists WHERE device_id=?",
+                           (device["id"],)).fetchone()[0]
+        if count >= 25:
+            raise HTTPException(400, "Playlist limit reached")
+        cur = db.execute("""INSERT INTO personal_playlists(device_id,name,url,pin_hash,pin_salt)
+                            VALUES(?,?,?,?,?)""",
+                         (device["id"], payload.name.strip(), payload.url.strip(), digest, salt))
+    return {"id": cur.lastrowid}
+
+
+@APP.put("/portal/api/playlists/{playlist_id}")
+def portal_update(playlist_id: int, payload: PersonalPlaylistUpdate, device=Depends(portal_device)):
+    if payload.remove_pin and payload.pin:
+        raise HTTPException(422, "Cannot set and remove PIN together")
+    with database() as db:
+        row = require_playlist(db, device["id"], playlist_id)
+        check_existing_pin(row, payload.current_pin)
+        digest, salt = (None, None) if payload.remove_pin else (
+            pin_fields(payload.pin) if payload.pin else (row["pin_hash"], row["pin_salt"]))
+        db.execute("""UPDATE personal_playlists SET name=?,url=?,pin_hash=?,pin_salt=? WHERE id=?""",
+                   (payload.name.strip(), payload.url.strip(), digest, salt, playlist_id))
+    return {"saved": True}
+
+
+@APP.delete("/portal/api/playlists/{playlist_id}")
+def portal_remove(playlist_id: int, payload: Optional[PinCheck] = None,
+                  device=Depends(portal_device)):
+    with database() as db:
+        row = require_playlist(db, device["id"], playlist_id)
+        check_existing_pin(row, payload.pin if payload else None)
+        db.execute("DELETE FROM personal_playlists WHERE id=?", (playlist_id,))
+    return {"deleted": True}
+
+
+class OfferInput(BaseModel):
+    model_config = {"extra": "forbid"}
+    title: str = Field(min_length=1, max_length=100)
+    price: str = Field(min_length=1, max_length=60)
+    duration: str = Field(min_length=1, max_length=100)
+    published: bool = False
+
+
+@APP.get("/api/public/offers")
+def public_offers():
+    with database() as db:
+        return {"offers": [dict(r) for r in db.execute(
+            "SELECT id,title,price,duration FROM activation_offers WHERE published=1 ORDER BY id")]}
+
+
+@APP.get("/admin/api/offers")
+def admin_offers(_: bool = Depends(admin_only)):
+    with database() as db:
+        return {"offers": [dict(r) for r in db.execute("SELECT * FROM activation_offers ORDER BY id")]}
+
+
+@APP.post("/admin/api/offers")
+def admin_add_offer(payload: OfferInput, _: bool = Depends(admin_only)):
+    with database() as db:
+        cur = db.execute("INSERT INTO activation_offers(title,price,duration,published) VALUES(?,?,?,?)",
+                         (payload.title.strip(), payload.price.strip(), payload.duration.strip(), int(payload.published)))
+    return {"id": cur.lastrowid}
+
+
+@APP.put("/admin/api/offers/{offer_id}")
+def admin_edit_offer(offer_id: int, payload: OfferInput, _: bool = Depends(admin_only)):
+    with database() as db:
+        cur = db.execute("UPDATE activation_offers SET title=?,price=?,duration=?,published=? WHERE id=?",
+                         (payload.title.strip(), payload.price.strip(), payload.duration.strip(), int(payload.published), offer_id))
+        if not cur.rowcount:
+            raise HTTPException(404, "Offer not found")
+    return {"saved": True}
+
+
+@APP.delete("/admin/api/offers/{offer_id}")
+def admin_remove_offer(offer_id: int, _: bool = Depends(admin_only)):
+    with database() as db:
+        db.execute("DELETE FROM activation_offers WHERE id=?", (offer_id,))
     return {"deleted": True}
 
 
 @APP.get("/health")
 def health():
     return {"status": "ok"}
+
+install_reseller(APP, database, admin_only, limiter, BASE, add_months, now_iso)
 
 app = APP
 
