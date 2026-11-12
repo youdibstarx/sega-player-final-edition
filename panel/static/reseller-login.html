@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SEGA PLAYER | دخول الموزع</title>
+  <link rel="stylesheet" href="/reseller/assets/reseller.css">
+  <script defer src="/site/assets/theme.js"></script>
+  <script defer src="/reseller/assets/reseller-login.js"></script>
+</head>
+<body>
+<header>
+  <strong>▶ SEGA PLAYER</strong>
+  <nav><a href="/">الرئيسية</a><button type="button" data-theme-toggle>تغيير المظهر</button></nav>
+</header>
+<main class="login-layout">
+  <h1>تسجيل دخول الموزع</h1>
+  <section>
+    <form id="login-form" class="login-panel" autocomplete="on">
+      <p>ادخل اسم المستخدم وكلمة السر ديال حساب الموزع. المدير هو اللي كينشئ الحساب وكيعبّي الرصيد.</p>
+      <label for="username">اسم المستخدم
+        <input id="username" name="username" type="text" required autocomplete="username" maxlength="40" autofocus>
+      </label>
+      <label for="password">كلمة السر
+        <input id="password" name="password" type="password" required autocomplete="current-password" maxlength="128">
+      </label>
+      <button type="submit" id="login-button">دخول إلى فضاء الموزعين</button>
+      <p id="login-status" class="login-error" role="status" aria-live="polite"></p>
+    </form>
+  </section>
+</main>
+</body>
+</html>

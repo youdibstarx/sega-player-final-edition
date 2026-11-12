@@ -8,6 +8,10 @@ async function api(path, method='GET', body) {
     ...(body ? {body: JSON.stringify(body)} : {})
   });
   if (!response.ok) {
+    if (response.status === 401) {
+      window.location.replace('/reseller/login');
+      throw Error('انتهت جلسة الموزع. رجاء سجّل الدخول من جديد.');
+    }
     let detail = '';
     try { detail = (await response.json()).detail || ''; } catch (error) {}
     const messages = {
@@ -78,3 +82,15 @@ $('#activate-form').addEventListener('submit', async event => {
   }
 });
 load().catch(error => { $('#status').textContent = error.message; });
+
+$('#logout').addEventListener('click', async () => {
+  const button = $('#logout');
+  button.disabled = true;
+  try {
+    await api('logout', 'POST');
+    window.location.replace('/reseller/login');
+  } catch (error) {
+    $('#status').textContent = error.message;
+    button.disabled = false;
+  }
+});
