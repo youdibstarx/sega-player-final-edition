@@ -5,34 +5,54 @@ import os
 import re
 import secrets
 import sqlite3
+import time
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field, field_validator
 
 def install(app, database, admin_only, limiter, base, add_months, now_iso):
     router = APIRouter()
-    basic = HTTPBasic(auto_error=False)
+    session_cookie = "sega_reseller_session"
+    session_seconds = 12 * 60 * 60
+
+    # Session tokens are stored as hashes, not plaintext. Existing reseller
+    # accounts and credit balances are preserved during this migration.
+    with database() as db:
+        db.execute("""CREATE TABLE IF NOT EXISTS reseller_sessions (
+            token_hash TEXT PRIMARY KEY,
+            reseller_id INTEGER NOT NULL REFERENCES resellers(id) ON DELETE CASCADE,
+            expires_at INTEGER NOT NULL
+        )""")
+        db.execute("CREATE INDEX IF NOT EXISTS reseller_session_expiry ON reseller_sessions(expires_at)")
 
     def hash_password(password, salt=None):
         salt = salt or secrets.token_hex(16)
         digest = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), 310000)
         return salt, digest.hex()
 
-    def reseller(request: Request, credentials: HTTPBasicCredentials = Depends(basic)):
-        client = request.client.host if request.client else "unknown"
-        limiter.check("reseller-auth-ip", client, 25, 300)
-        if not credentials:
-            raise HTTPException(401, "Reseller login required", headers={"WWW-Authenticate": 'Basic realm="SEGA Reseller"'})
+    def current_account(request: Request):
+        token = request.cookies.get(session_cookie, "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{40,128}", token):
+            return None
+        token_hash = hashlib.sha256(token.encode("ascii")).hexdigest()
         with database() as db:
-            row = db.execute("SELECT * FROM resellers WHERE username=?", (credentials.username,)).fetchone()
-        # Perform a real KDF even when the user does not exist.
-        salt = row["password_salt"] if row else "0" * 32
-        _, digest = hash_password(credentials.password, salt)
-        if not row or not hmac.compare_digest(row["password_hash"], digest) or not row["enabled"]:
-            raise HTTPException(401, "Invalid reseller credentials", headers={"WWW-Authenticate": 'Basic realm="SEGA Reseller"'})
-        return dict(row)
+            row = db.execute("""SELECT r.* FROM reseller_sessions s
+                JOIN resellers r ON r.id=s.reseller_id
+                WHERE s.token_hash=? AND s.expires_at>? AND r.enabled=1""",
+                (token_hash, int(time.time()))).fetchone()
+        return dict(row) if row else None
+
+    def reseller(request: Request):
+        account = current_account(request)
+        if account is None:
+            raise HTTPException(401, "Reseller session expired or login required")
+        return account
+
+    class ResellerLogin(BaseModel):
+        model_config = {"extra": "forbid"}
+        username: str = Field(min_length=1, max_length=40)
+        password: str = Field(min_length=1, max_length=128)
 
     class ResellerCreate(BaseModel):
         model_config = {"extra": "forbid"}
@@ -60,14 +80,60 @@ def install(app, database, admin_only, limiter, base, add_months, now_iso):
                 raise ValueError("Invalid MAC address")
             return ":".join(raw[index:index + 2] for index in range(0, 12, 2))
 
+    @router.get("/reseller/login")
+    def reseller_login_page(request: Request):
+        if current_account(request) is not None:
+            return RedirectResponse("/reseller", status_code=303)
+        return FileResponse(base / "static" / "reseller-login.html")
+
+    @router.post("/reseller/api/login")
+    def reseller_login(payload: ResellerLogin, request: Request):
+        client = request.client.host if request.client else "unknown"
+        limiter.check("reseller-login-ip", client, 30, 300)
+        limiter.check("reseller-login-account", payload.username.lower(), 12, 300)
+        with database() as db:
+            row = db.execute("SELECT * FROM resellers WHERE username=?", (payload.username,)).fetchone()
+        salt = row["password_salt"] if row else "0" * 32
+        _, digest = hash_password(payload.password, salt)
+        if not row or not row["enabled"] or not hmac.compare_digest(row["password_hash"], digest):
+            raise HTTPException(401, "Invalid username or password")
+        token = secrets.token_urlsafe(48)
+        expiry = int(time.time()) + session_seconds
+        with database() as db:
+            db.execute("DELETE FROM reseller_sessions WHERE expires_at<=?", (int(time.time()),))
+            db.execute("INSERT INTO reseller_sessions(token_hash,reseller_id,expires_at) VALUES(?,?,?)",
+                (hashlib.sha256(token.encode("ascii")).hexdigest(), row["id"], expiry))
+        response = JSONResponse({"logged_in": True})
+        # Secure is mandatory on public domains, even if TLS ends at a reverse proxy.
+        host = request.headers.get("host", "").split(":")[0].lower()
+        secure_cookie = request.url.scheme == "https" or host not in {"testserver", "localhost", "127.0.0.1", "::1"}
+        response.set_cookie(session_cookie, token, max_age=session_seconds, path="/reseller",
+                            secure=secure_cookie, httponly=True, samesite="strict")
+        return response
+
+    @router.post("/reseller/api/logout")
+    def reseller_logout(request: Request):
+        token = request.cookies.get(session_cookie, "")
+        if token:
+            with database() as db:
+                db.execute("DELETE FROM reseller_sessions WHERE token_hash=?",
+                           (hashlib.sha256(token.encode("utf-8")).hexdigest(),))
+        response = JSONResponse({"logged_out": True})
+        response.delete_cookie(session_cookie, path="/reseller", samesite="strict")
+        return response
+
     @router.get("/reseller")
-    def reseller_page(_: dict = Depends(reseller)):
+    def reseller_page(request: Request):
+        if current_account(request) is None:
+            return RedirectResponse("/reseller/login", status_code=303)
         return FileResponse(base / "static" / "reseller.html")
 
     @router.get("/reseller/assets/{name}")
-    def reseller_asset(name: str, _: dict = Depends(reseller)):
-        if name not in {"reseller.js", "reseller.css"}:
+    def reseller_asset(name: str, request: Request):
+        if name not in {"reseller.js", "reseller-login.js", "reseller.css"}:
             raise HTTPException(404)
+        if name == "reseller.js" and current_account(request) is None:
+            raise HTTPException(401, "Login required")
         return FileResponse(base / "static" / name)
 
     @router.get("/admin/api/resellers")
