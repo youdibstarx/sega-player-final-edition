@@ -47,7 +47,7 @@ class NewPanelFeaturesTests(unittest.TestCase):
 
     def test_offers_are_private_until_published(self):
         payload = {"title": "Year", "price": "100 MAD", "duration": "12 months", "published": False}
-        self.assertEqual(self.c.post("/admin/api/offers", json=payload).status_code, 401)
+        self.assertEqual(self.c.post("/admin/api/offers", headers={"X-Panel-Request": "1"}, json=payload).status_code, 401)
         added = self.c.post("/admin/api/offers", headers=self.admin, json=payload)
         self.assertEqual(added.status_code, 200)
         self.assertEqual(self.c.get("/api/public/offers").json()["offers"], [])
