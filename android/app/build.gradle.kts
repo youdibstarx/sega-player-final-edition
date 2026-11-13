@@ -96,9 +96,11 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
     implementation("androidx.media3:media3-exoplayer-dash:1.11.1")
     implementation("androidx.media3:media3-ui:1.11.1")
-    // Audio-only FFmpeg decoder extension, built for the same Media3 1.11.1.
-    // AC3 / E-AC3 / DTS / AAC / TrueHD decode without the TV box's audio codec.
-    implementation("io.put:media3-ffmpeg-decoder:1.11.1+1")
+    // Source-built LGPL FFmpeg audio-only renderer targeting API 24
+    // (Android 7). The upstream prebuilt AAR requires API 26 and is NOT used.
+    // Run android/scripts/prepare_ffmpeg_audio.sh before assembling.
+    implementation(files("libs/media3-ffmpeg-decoder-api24.aar"))
+    implementation("androidx.media3:media3-decoder:1.11.1")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("com.google.zxing:core:3.5.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
