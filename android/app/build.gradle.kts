@@ -14,8 +14,8 @@ android {
         applicationId = "com.segaiptv.player"
         minSdk = 24
         targetSdk = 35
-        versionCode = 43
-        versionName = "0.5.25"
+        versionCode = 44
+        versionName = "0.5.26"
         // Android Emulator: 10.0.2.2; physical device: your PC LAN IP / domain.
         val backendUrl = providers.gradleProperty("SEGA_IPTV_BACKEND_URL")
             .orElse("https://sega.faster4k.xyz").get()
@@ -96,6 +96,9 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
     implementation("androidx.media3:media3-exoplayer-dash:1.11.1")
     implementation("androidx.media3:media3-ui:1.11.1")
+    // Audio-only FFmpeg decoder extension, built for the same Media3 1.11.1.
+    // AC3 / E-AC3 / DTS / AAC / TrueHD decode without the TV box's audio codec.
+    implementation("io.put:media3-ffmpeg-decoder:1.11.1+1")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("com.google.zxing:core:3.5.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
