@@ -2,7 +2,7 @@ name: Build SEGA PLAYER V3 Secure APK
 on:
   workflow_dispatch:
   push:
-    branches: [main, fix/commercial-batch-one, fix/commercial-batch-two, fix/0.5.16-full-stack-compatible, feature/0.5.17-dashboard-network-m3u, fix/android7-network-compat, fix/0.5.25-tv-remote-focus-layout]
+    branches: [main, fix/commercial-batch-one, fix/commercial-batch-two, fix/0.5.16-full-stack-compatible, feature/0.5.17-dashboard-network-m3u, fix/android7-network-compat, fix/0.5.25-tv-remote-focus-layout, fix/0.5.26-ffmpeg-4k-audio]
     paths:
       - 'android/**'
       - '.github/workflows/build-apk.yml'
