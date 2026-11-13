@@ -102,11 +102,28 @@ private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls
             if (owned != null || channel == null || store.blocked(channel)) return
             error = ""; buffering = true
             val excludedDecoders = recovery.excluded.toSet()
+            // Preserve the original audio renderer on phones, where sound already
+            // works. Only TV and touchless box devices prefer the FFmpeg renderer.
+            val pm = context.packageManager
+            val tvMode = (context.getSystemService(android.content.Context.UI_MODE_SERVICE)
+                as? android.app.UiModeManager)?.currentModeType ==
+                android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+            val useFfmpegAudio = AudioDecoderPolicy.preferFfmpeg(
+                hasLeanback = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK),
+                tvUiMode = tvMode,
+                hasTelevisionFeature = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEVISION),
+                hasTouchscreen = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN)
+            )
+            android.util.Log.i("SEGA_AUDIO", "Audio mode: " +
+                (if (useFfmpegAudio) "TV/box (FFmpeg preferred)" else "mobile (platform preferred)"))
             val renderers = androidx.media3.exoplayer.DefaultRenderersFactory(context.applicationContext)
-                // An advertised hardware AC3/EAC3 decoder can produce silence.
-                // Prefer FFmpeg *audio* decoding; MediaCodec still handles 4K video.
+                // Prefer FFmpeg only for boxes that may falsely advertise AC3/EAC3 support.
+                // Hardware MediaCodec video decoding remains unchanged on every device.
                 .setExtensionRendererMode(
-                    androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                    if (useFfmpegAudio)
+                        androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                    else
+                        androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
                 )
                 .setEnableDecoderFallback(true)
                 .setMediaCodecSelector { mime, secure, tunneling ->
