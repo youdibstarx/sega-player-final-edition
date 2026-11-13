@@ -96,6 +96,12 @@ private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls
             error = ""; buffering = true
             val excludedDecoders = recovery.excluded.toSet()
             val renderers = androidx.media3.exoplayer.DefaultRenderersFactory(context.applicationContext)
+                // Prefer the FFmpeg *audio-only* extension over a broken or
+                // passthrough-only device audio decoder. Video keeps MediaCodec
+                // hardware acceleration, including HEVC 4K.
+                .setExtensionRendererMode(
+                    androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                )
                 .setEnableDecoderFallback(true)
                 .setMediaCodecSelector { mime, secure, tunneling ->
                     androidx.media3.exoplayer.mediacodec.MediaCodecSelector.DEFAULT
