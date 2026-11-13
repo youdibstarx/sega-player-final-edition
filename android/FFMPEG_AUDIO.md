@@ -8,13 +8,14 @@ in VLC/BOB Player but plays silently on a particular TV box can have an AC-3, E-
 MediaCodec does not decode properly. This hypothesis must be verified against
 a failing stream on a real target device.
 
-The app now depends on:
+The app now depends on a **source-built Android 7-compatible** FFmpeg audio-only AAR, built with `bash android/scripts/prepare_ffmpeg_audio.sh` before Gradle. The published Maven Central `io.put:media3-ffmpeg-decoder:1.11.1+1` AAR requires API 26 and MUST NOT be used unchanged because SEGA PLAYER 0.5.26 targets API 24.
 
-- `io.put:media3-ffmpeg-decoder:1.11.1+1` from Maven Central.
+- Upstream version: `v1.11.1+1`, pinned at commit `1d9e66a310e8cac6d4cfa6f637ffa75fba7a3063`.
 - Upstream implementation: https://github.com/putdotio/media3-ffmpeg-decoder
 - FFmpeg-native supported decoders for this build: `vorbis opus flac alac
   pcm_mulaw pcm_alaw mp3 amrnb amrwb aac ac3 eac3 dca mlp truehd`.
-- Bundled native ABIs: `armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64`.
+- Bundled native ABIs: `armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64`. Target native API level is **24**.
+- Build requirements: JDK 21, Android SDK 36, NDK 28.2, CMake, and GNU native build tools; GitHub Actions builds the AAR from the pinned upstream source before building the app.
 
 The Media3 `DefaultRenderersFactory` is set to
 `EXTENSION_RENDERER_MODE_PREFER`, **not merely ON**. This matters because
@@ -46,7 +47,7 @@ and reseller credits are unaffected.
 
 ## Open-source licenses and release requirements
 
-The Media3 FFmpeg extension wrapper is Apache-2.0; FFmpeg within the AAR is
+The Media3 FFmpeg extension wrapper is Apache-2.0; FFmpeg within the locally rebuilt AAR is
 **LGPL-2.1-or-later**. The matching release publishes notices and a source /
 relink archive in Maven Central:
 https://repo1.maven.org/maven2/io/put/media3-ffmpeg-decoder/1.11.1+1/
@@ -57,3 +58,8 @@ under `META-INF/media3-ffmpeg-decoder/` and ensure users can exercise their
 LGPL relinking/replacement rights. Review the application's installation
 signature/attestation policy against those rights before a commercial release.
 Do not treat an embedded notice alone as sufficient legal compliance.
+
+
+## Rebuilding for Android 7
+
+Run `bash android/scripts/prepare_ffmpeg_audio.sh` before `gradle :app:assembleHardened`. The script fetches the audited upstream tag, verifies its exact git commit, builds its FFmpeg module with `-PffmpegMinSdk=24` and verifies JNI for both ARM ABIs. The output is `android/app/libs/media3-ffmpeg-decoder-api24.aar`. Do not check this generated binary into Git; keep the exact source, scripts and LGPL notices with each distributed build.
