@@ -17,8 +17,14 @@ The app now depends on a **source-built Android 7-compatible** FFmpeg audio-only
 - Bundled native ABIs: `armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64`. Target native API level is **24**.
 - Build requirements: JDK 21, Android SDK 36, NDK 28.2, CMake, and GNU native build tools; GitHub Actions builds the AAR from the pinned upstream source before building the app.
 
-The Media3 `DefaultRenderersFactory` is set to
-`EXTENSION_RENDERER_MODE_PREFER`, **not merely ON**. This matters because
+The Media3 `DefaultRenderersFactory` sets `EXTENSION_RENDERER_MODE_PREFER`
+**only on Android TV and touchless TV boxes**. Normal touch-enabled phones use
+`EXTENSION_RENDERER_MODE_OFF` to preserve their already-working platform audio.
+A device is classified as TV by Leanback/Television features, TV UI mode, or
+absence of a touchscreen (covers many uncertified Android TV boxes).
+This is a device heuristic: some boxes report phone capabilities and might
+require a later explicit decoder preference switch. When enabled on boxes,
+this is PREFER, **not merely ON**. This matters because
 some TV boxes advertise AC-3/E-AC-3 hardware decoding but produce silence
 without reporting a decoder initialization failure. The FFmpeg *audio* renderer
 is preferred, while the stock MediaCodec *video* renderer keeps 4K hardware
