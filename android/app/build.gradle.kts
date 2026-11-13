@@ -90,6 +90,10 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
     implementation("androidx.media3:media3-exoplayer-dash:1.11.1")
     implementation("androidx.media3:media3-ui:1.11.1")
+    // Official Media3 FfmpegAudioRenderer with LGPL FFmpeg binaries, built for
+    // Media3 1.11.1. Adds AC-3/E-AC-3/DTS/TrueHD/AAC software audio decoding.
+    // Never copy proprietary native binaries out of the reference player APK.
+    implementation("io.put:media3-ffmpeg-decoder:1.11.1+1")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("com.google.zxing:core:3.5.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
