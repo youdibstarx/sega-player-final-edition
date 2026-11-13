@@ -103,6 +103,11 @@ private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls
             error = ""; buffering = true
             val excludedDecoders = recovery.excluded.toSet()
             val renderers = androidx.media3.exoplayer.DefaultRenderersFactory(context.applicationContext)
+                // An advertised hardware AC3/EAC3 decoder can produce silence.
+                // Prefer FFmpeg *audio* decoding; MediaCodec still handles 4K video.
+                .setExtensionRendererMode(
+                    androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                )
                 .setEnableDecoderFallback(true)
                 .setMediaCodecSelector { mime, secure, tunneling ->
                     androidx.media3.exoplayer.mediacodec.MediaCodecSelector.DEFAULT
@@ -126,6 +131,17 @@ private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls
             created.setAudioAttributes(AudioAttributes.DEFAULT, true)
             created.setHandleAudioBecomingNoisy(true)
             created.addListener(object : Player.Listener {
+                override fun onTracksChanged(tracks: Tracks) {
+                    // Log only audio format details, never a stream URL or credentials.
+                    val selected = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+                        .flatMap { group ->
+                            (0 until group.length).filter { group.isTrackSelected(it) }
+                                .map { group.getTrackFormat(it) }
+                        }.joinToString(" | ") {
+                            "${it.sampleMimeType ?: "unknown"} ${it.channelCount}ch ${it.sampleRate}Hz"
+                        }
+                    android.util.Log.i("SEGA_AUDIO", "Selected audio: ${selected.ifBlank { "none" }}")
+                }
                 override fun onPlaybackStateChanged(state: Int) {
                     buffering = state == Player.STATE_BUFFERING
                     if (state == Player.STATE_READY) {
