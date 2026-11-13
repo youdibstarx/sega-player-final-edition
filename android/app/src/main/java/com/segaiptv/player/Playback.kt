@@ -102,7 +102,29 @@ private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls
             if (owned != null || channel == null || store.blocked(channel)) return
             error = ""; buffering = true
             val excludedDecoders = recovery.excluded.toSet()
+            // Preserve the original audio renderer on phones, where sound already
+            // works. Only TV and touchless box devices prefer the FFmpeg renderer.
+            val pm = context.packageManager
+            val tvMode = (context.getSystemService(android.content.Context.UI_MODE_SERVICE)
+                as? android.app.UiModeManager)?.currentModeType ==
+                android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+            val useFfmpegAudio = AudioDecoderPolicy.preferFfmpeg(
+                hasLeanback = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK),
+                tvUiMode = tvMode,
+                hasTelevisionFeature = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEVISION),
+                hasTouchscreen = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN)
+            )
+            android.util.Log.i("SEGA_AUDIO", "Audio mode: " +
+                (if (useFfmpegAudio) "TV/box (FFmpeg preferred)" else "mobile (platform preferred)"))
             val renderers = androidx.media3.exoplayer.DefaultRenderersFactory(context.applicationContext)
+                // Prefer FFmpeg only for boxes that may falsely advertise AC3/EAC3 support.
+                // Hardware MediaCodec video decoding remains unchanged on every device.
+                .setExtensionRendererMode(
+                    if (useFfmpegAudio)
+                        androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                    else
+                        androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
+                )
                 .setEnableDecoderFallback(true)
                 .setMediaCodecSelector { mime, secure, tunneling ->
                     androidx.media3.exoplayer.mediacodec.MediaCodecSelector.DEFAULT
@@ -126,6 +148,17 @@ private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls
             created.setAudioAttributes(AudioAttributes.DEFAULT, true)
             created.setHandleAudioBecomingNoisy(true)
             created.addListener(object : Player.Listener {
+                override fun onTracksChanged(tracks: Tracks) {
+                    // Log only audio format details, never a stream URL or credentials.
+                    val selected = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+                        .flatMap { group ->
+                            (0 until group.length).filter { group.isTrackSelected(it) }
+                                .map { group.getTrackFormat(it) }
+                        }.joinToString(" | ") {
+                            "${it.sampleMimeType ?: "unknown"} ${it.channelCount}ch ${it.sampleRate}Hz"
+                        }
+                    android.util.Log.i("SEGA_AUDIO", "Selected audio: ${selected.ifBlank { "none" }}")
+                }
                 override fun onPlaybackStateChanged(state: Int) {
                     buffering = state == Player.STATE_BUFFERING
                     if (state == Player.STATE_READY) {
