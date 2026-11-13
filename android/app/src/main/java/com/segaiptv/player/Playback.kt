@@ -121,6 +121,17 @@ private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls
             created.setAudioAttributes(AudioAttributes.DEFAULT, true)
             created.setHandleAudioBecomingNoisy(true)
             created.addListener(object : Player.Listener {
+                override fun onTracksChanged(tracks: Tracks) {
+                    // Codec-only diagnostics; never log playlist URLs or credentials.
+                    val selected = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+                        .flatMap { group ->
+                            (0 until group.length).filter { group.isTrackSelected(it) }
+                                .map { group.getTrackFormat(it) }
+                        }.joinToString(" | ") {
+                            "${it.sampleMimeType ?: "unknown"} ${it.channelCount}ch ${it.sampleRate}Hz"
+                        }
+                    android.util.Log.i("SEGA_AUDIO", "Selected audio: ${selected.ifBlank { "none" }}")
+                }
                 override fun onPlaybackStateChanged(state: Int) {
                     buffering = state == Player.STATE_BUFFERING
                     if (state == Player.STATE_READY) {
