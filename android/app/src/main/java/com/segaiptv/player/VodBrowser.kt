@@ -224,24 +224,20 @@ internal fun PosterArtwork(title: VodTitle, modifier: Modifier, refreshPosters: 
     // image request with caches bypassed; this also recovers from stale URLs.
     var tvRetryRequested by remember(title.id, title.cover, refreshPosters) { mutableIntStateOf(0) }
     var tvRetryApplied by remember(title.id, title.cover, refreshPosters) { mutableIntStateOf(0) }
-    var imageLoaded by remember(title.id, cover) { mutableStateOf(false) }
-    LaunchedEffect(title.id, title.cover, attempt, refreshPosters) {
-        if (entry != null) {
-            val resolved = PosterRepository.resolve(context, entry,
-                forceDetails = (isTvBox && refreshPosters > 0) || (!isTvBox && attempt > 0))
-            cover = resolved
-            if (isTvBox && resolved.isBlank() && XtreamSource.forEntry(entry) != null &&
-                tvRetryRequested == 0
-            ) tvRetryRequested = 1
-        }
-    }
-    LaunchedEffect(title.id, title.cover, tvRetryRequested) {
-        if (!isTvBox || tvRetryRequested == 0 || entry == null) return@LaunchedEffect
-        kotlinx.coroutines.delay(PosterRetryPolicy.delayMillis(tvRetryRequested))
-        // One forced provider-details lookup can find a replacement cover.
-        val updated = PosterRepository.resolve(context, entry, forceDetails = tvRetryRequested == 1)
-        if (updated.isNotBlank()) cover = updated
-        tvRetryApplied = tvRetryRequested
+    // A single effect owns metadata resolution. A retry/refresh cancels its
+    // predecessor so a slow initial lookup cannot overwrite a recovered URL.
+    LaunchedEffect(title.id, title.cover, attempt, tvRetryRequested, refreshPosters) {
+        if (entry == null) return@LaunchedEffect
+        val retryNumber = if (isTvBox) tvRetryRequested else 0
+        if (retryNumber > 0) kotlinx.coroutines.delay(PosterRetryPolicy.delayMillis(retryNumber))
+        val resolved = PosterRepository.resolve(context, entry,
+            forceDetails = (isTvBox && (retryNumber == 1 || refreshPosters > 0)) ||
+                (!isTvBox && attempt > 0))
+        cover = resolved
+        tvRetryApplied = retryNumber
+        if (isTvBox && resolved.isBlank() && XtreamSource.forEntry(entry) != null &&
+            retryNumber < PosterRetryPolicy.MAX_RETRIES
+        ) tvRetryRequested = retryNumber + 1
     }
     val request = remember(cover, context, tvRetryApplied, refreshPosters) {
         coil.request.ImageRequest.Builder(context).data(cover).size(360, 540).allowHardware(false)
@@ -252,10 +248,14 @@ internal fun PosterArtwork(title: VodTitle, modifier: Modifier, refreshPosters: 
                 }
             }.build()
     }
+    var imageLoaded by remember(title.id, request) { mutableStateOf(false) }
     Box(modifier.background(appTheme.row), contentAlignment = Alignment.Center) {
         if (!imageLoaded) Text(tr(R.string.no_cover), color = Color.LightGray, fontSize = 11.sp,
             modifier = Modifier.padding(10.dp))
-        if (cover.isNotBlank()) AsyncImage(request, title.title,
+        // Recreate the painter even when a refresh resolves to the same URL
+        // and the same cache policy as the last failed request.
+        if (cover.isNotBlank()) key(title.id, refreshPosters, tvRetryApplied) {
+            AsyncImage(request, title.title,
             Modifier.fillMaxSize(), contentScale = ContentScale.Fit,
             onSuccess = { imageLoaded = true },
             onError = { state ->
@@ -273,6 +273,7 @@ internal fun PosterArtwork(title: VodTitle, modifier: Modifier, refreshPosters: 
                     ) tvRetryRequested++
                 }
             })
+        }
     }
 }
 

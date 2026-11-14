@@ -68,7 +68,7 @@ internal object PosterRepository {
                     fetch(source.api(if (series) "get_series_info" else "get_vod_info", id,
                         if (series) "series_id" else "vod_id"))
                 }
-                val url = ArtworkUrls.details(source.base, raw, series).ifBlank { original }
+                val url = ArtworkUrls.details(source.base, raw, series)
                 // Do not retain an empty result as a permanent cache hit.
                 // A missing provider poster can become available on the next visit.
                 if (url.isNotBlank()) {
@@ -77,7 +77,7 @@ internal object PosterRepository {
                     if (prefs.all.size >= 512) prefs.all.keys.take(64).forEach { edit.remove(it) }
                     edit.putString(key, url).apply()
                 }
-                url
+                url.ifBlank { original }
             } catch (ex: Exception) {
                 if (ex is CancellationException) throw ex
                 // A timeout or TLS failure must not poison the metadata
