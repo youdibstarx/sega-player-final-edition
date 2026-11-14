@@ -37,13 +37,19 @@ async function main() {
     }
     browser = await chromium.launch({ headless: true });
     for (const width of [390, 1366]) {
-      const context = await browser.newContext({ viewport: { width, height: 900 },
-        httpCredentials: { username: 'qa', password: 'qa-local-only' } });
+      const context = await browser.newContext({ viewport: { width, height: 900 } });
       const page = await context.newPage();
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
       for (const route of ['/', '/portal', '/reseller/login', '/admin']) {
         assert((await page.goto(base + route)).ok());
+        if (route === '/admin') {
+          await page.waitForURL('**/admin/login');
+          await page.locator('[name=username]').fill('qa');
+          await page.locator('[name=password]').fill('qa-local-only');
+          await page.locator('#login-button').click();
+          await page.waitForURL('**/admin');
+        }
         await page.waitForLoadState('networkidle');
         const toggle = page.locator('[data-theme-toggle]').first();
         await toggle.click();
@@ -63,6 +69,17 @@ async function main() {
             await page.locator(`[data-tab="${tab}"]`).click();
             assert(await page.locator('#tab-' + tab).isVisible());
           }
+          const token = (await context.cookies()).find(cookie => cookie.name === 'sega_admin_session');
+          assert(token && token.httpOnly && token.sameSite === 'Strict');
+          await page.locator('#admin-logout').click();
+          await page.waitForURL('**/admin/login');
+          assert.equal((await context.request.get(base + '/admin/api/state')).status(), 401);
+          await context.addCookies([token]);
+          assert.equal((await context.request.get(base + '/admin/api/state')).status(), 401);
+          await context.clearCookies();
+          await page.goto(base + '/admin');
+          await page.waitForURL('**/admin/login');
+          results.push({ width, admin_login_logout_replay: 'passed' });
         }
         results.push({ width, route, themes: 'passed', overflow: false });
       }

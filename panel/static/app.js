@@ -3,7 +3,7 @@ let state = {devices:[],playlists:[],assignments:[],settings:{}};
 const $ = x => document.querySelector(x);
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, x => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
 function toast(message){const t=$('#toast');t.textContent=message;t.classList.add('visible');setTimeout(()=>t.classList.remove('visible'),2800)}
-async function call(url, options={}){const res=await fetch(url,{...options,headers:{'X-Panel-Request':'1','Content-Type':'application/json',...(options.headers||{})}});if(!res.ok){let error;try{error=(await res.json()).detail}catch{error=res.statusText}throw Error(typeof error==='string'?error:JSON.stringify(error))}return res.json()}
+async function call(url, options={}){const res=await fetch(url,{...options,headers:{'X-Panel-Request':'1','Content-Type':'application/json',...(options.headers||{})}});if(res.status===401){window.location.replace('/admin/login');throw Error('انتهت جلسة الإدارة')}if(!res.ok){let error;try{error=(await res.json()).detail}catch{error=res.statusText}throw Error(typeof error==='string'?error:JSON.stringify(error))}return res.json()}
 async function load(){try{state=await call('/admin/api/state');render();if(!$('#tab-proofs').classList.contains('hidden'))await loadProofs()}catch(e){toast('تعذر تحميل البيانات: '+e.message)}}
 function showTab(name){document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('hidden',el.id!=='tab-'+name));document.querySelectorAll('.nav').forEach(el=>el.classList.toggle('active',el.dataset.tab===name));$('#page-title').textContent=({overview:'نظرة عامة',devices:'الأجهزة والتفعيل',playlists:'قوائم التشغيل',appearance:'إعدادات المظهر',offers:'عروض التفعيل',resellers:'إدارة الموزعين',proofs:'اعتماد التثبيتات'})[name]||name;if(name==='proofs')loadProofs()}
 function render(){
@@ -84,5 +84,16 @@ document.body.addEventListener('click',e=>{
 });
 load();
 
-
-
+// Revalidate restored pages so browser Back cannot revive a logged-out session.
+window.addEventListener('pageshow', event => { if(event.persisted)load(); });
+$('#admin-logout').onclick = async () => {
+  const button = $('#admin-logout');
+  button.disabled = true;
+  try {
+    await call('/admin/api/logout', {method:'POST'});
+    window.location.replace('/admin/login');
+  } catch (error) {
+    toast(error.message);
+    button.disabled = false;
+  }
+};
