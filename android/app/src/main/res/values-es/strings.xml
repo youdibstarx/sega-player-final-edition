@@ -153,6 +153,7 @@
     <string name="subscription_unlimited">Ilimitado</string>
     <string name="subscription_days">Quedan %1$d días</string>
     <string name="connection_and_updates">Conexión y actualizaciones</string>
+    <string name="refresh_posters">Actualizar carteles</string>
 </resources>
 
 
