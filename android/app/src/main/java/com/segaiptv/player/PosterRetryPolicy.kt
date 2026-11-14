@@ -25,7 +25,7 @@ internal object PosterRetryPolicy {
             // Coil 2 reports status in its HttpException message; do not log
             // the message because some providers embed credential-bearing URLs.
             val text = reason.message.orEmpty()
-            if (Regex("""(?i)\\b(?:HTTP\\s*|code\\s*[=:]\\s*)(401|403|404|410)\\b""")
+            if (Regex("""(?i)\b(?:HTTP\s*|code\s*[=:]\s*)(401|403|404|410)\b""")
                     .containsMatchIn(text)) return false
             current = reason.cause
         }
@@ -37,7 +37,7 @@ internal object PosterRetryPolicy {
         repeat(6) {
             val reason = current ?: return@repeat
             val text = reason.message.orEmpty()
-            val code = Regex("""(?i)\\b(?:HTTP\\s*|code\\s*[=:]\\s*)([1-5]\\d{2})\\b""")
+            val code = Regex("""(?i)\b(?:HTTP\s*|code\s*[=:]\s*)([1-5]\d{2})\b""")
                 .find(text)?.groupValues?.get(1)
             if (code != null) return "HTTP_$code"
             if (reason is javax.net.ssl.SSLException) return "TLS"
