@@ -27,6 +27,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+      - name: Preserve FFmpeg corresponding source, licenses and native provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: SEGA-FFmpeg-source-and-notices
+          path: android/ffmpeg-distribution/
+          if-no-files-found: error
       - name: Test and build hardened APK
         working-directory: android
         env:

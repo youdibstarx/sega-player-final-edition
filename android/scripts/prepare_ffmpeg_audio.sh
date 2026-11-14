@@ -22,9 +22,12 @@ test "$(git -C "$WORK/source" rev-parse HEAD)" = "$PINNED_COMMIT" || {
 
 # Requires JDK 21, SDK 36, NDK 28.2.13676358 and CMake >=3.21.
 # Build FFmpeg and JNI specifically for the app's minSdkVersion 24.
+# Keep the corresponding-source archive's rebuild instructions consistent
+# with the actual native build, rather than the upstream API26 default.
+sed -i 's/^ffmpegMinSdk=.*/ffmpegMinSdk=24/' "$WORK/source/gradle.properties"
 (
   cd "$WORK/source"
-  ./gradlew --no-daemon assembleRelease -PffmpegMinSdk=24
+  ./gradlew --no-daemon checkAar packageFfmpegSource -PffmpegMinSdk=24
 )
 AAR="$WORK/source/build/outputs/aar/media3-ffmpeg-decoder-release.aar"
 test -s "$AAR"
@@ -36,5 +39,13 @@ for ABI in arm64-v8a armeabi-v7a; do
 done
 mkdir -p "$(dirname "$OUTPUT")"
 cp "$AAR" "$OUTPUT"
+SOURCE_ARCHIVE="$WORK/source/build/ffmpeg-source/ffmpeg-source.tar.xz"
+test -s "$SOURCE_ARCHIVE"
+LICENSE_OUTPUT="$REPO_ROOT/android/ffmpeg-distribution"
+mkdir -p "$LICENSE_OUTPUT"
+cp "$SOURCE_ARCHIVE" "$LICENSE_OUTPUT/ffmpeg-source-api24.tar.xz"
+cp "$WORK/source/LICENSE" "$WORK/source/NOTICE" "$LICENSE_OUTPUT/"
+unzip -p "$AAR" META-INF/media3-ffmpeg-decoder/ffmpeg-build.txt > "$LICENSE_OUTPUT/ffmpeg-build.txt"
+printf 'Wrapper commit: %s\nLocal build override: ffmpegMinSdk=24\n' "$PINNED_COMMIT" >> "$LICENSE_OUTPUT/ffmpeg-build.txt"
 echo "FFmpeg AAR rebuilt for API24, source pinned at $PINNED_COMMIT"
 sha256sum "$OUTPUT"
