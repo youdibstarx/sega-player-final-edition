@@ -45,7 +45,10 @@ class PublicSiteTests(unittest.TestCase):
             self.assertNotEqual(self.client.get(path).status_code, 200)
 
     def test_admin_remains_protected(self):
-        self.assertEqual(self.client.get("/admin").status_code, 401)
+        response = self.client.get("/admin", follow_redirects=False)
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers['location'], '/admin/login')
+        self.assertEqual(self.client.get('/admin/api/state').status_code, 401)
 
 
 if __name__ == "__main__":

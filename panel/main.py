@@ -17,6 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from security import RateLimiter
 from proof import DeviceProofs
 from reseller import install as install_reseller
+from admin_auth import install as install_admin_auth
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field, field_validator
 
@@ -24,7 +25,7 @@ BASE = Path(__file__).resolve().parent
 DB_FILE = Path(os.getenv("DATABASE_PATH", str(BASE / "data" / "segaiptv.db")))
 DB_FILE.parent.mkdir(parents=True, exist_ok=True)
 APP = FastAPI(title="SEGA IPTV Player Control Panel", docs_url=None, redoc_url=None, openapi_url=None)
-security = HTTPBasic()
+security = HTTPBasic(auto_error=False)
 
 limiter = RateLimiter(os.getenv("SECURITY_DATABASE_PATH", str(DB_FILE.with_name("security-limits.db"))))
 
@@ -230,19 +231,11 @@ def initialize():
 initialize()
 
 
-def admin_only(request: Request, credentials: HTTPBasicCredentials = Depends(security)):
-    admin = os.getenv("ADMIN_USERNAME", "")
-    password = os.getenv("ADMIN_PASSWORD", "")
-    # Explicit env var required; never ship a default password.
-    if not admin or not password or not (
-        hmac.compare_digest(credentials.username.encode(), admin.encode())
-        and hmac.compare_digest(credentials.password.encode(), password.encode())
-    ):
-        # Successful Basic-authenticated assets and API calls are not login
-        # failures. The independent admin-ip request limit still applies.
-        limiter.check("admin-login", request.client.host if request.client else "unknown", 30)
-        raise HTTPException(status_code=401, detail="Invalid admin credentials", headers={"WWW-Authenticate": "Basic"})
-    return True
+authorize_admin = install_admin_auth(APP, database, limiter, BASE)
+
+
+def admin_only(request: Request, credentials: Optional[HTTPBasicCredentials] = Depends(security)):
+    return authorize_admin(request, credentials)
 
 
 def key_digest(key: str) -> str:
@@ -403,11 +396,6 @@ async def device_config(device_id: str, request: Request):
         "background_url": settings["background_url"], "logo_url": settings["logo_url"],
         "playlists": [dict(r) for r in playlist_rows] + (personal_for_config(device_id) if enabled else [])
     }
-
-
-@APP.get("/admin")
-def admin_page(_: bool = Depends(admin_only)):
-    return FileResponse(BASE / "static" / "admin.html")
 
 
 @APP.get("/admin/assets/{file_name}")
@@ -758,6 +746,3 @@ def server_time():
 install_reseller(APP, database, admin_only, limiter, BASE, add_months, now_iso)
 
 app = APP
-
-
-
