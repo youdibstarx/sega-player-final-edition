@@ -40,10 +40,10 @@ class LiveFocusRestoreTest {
             }
         }
         compose.waitUntil(5000) { compose.onAllNodesWithText("Channel 2").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Channel 2").performClick()
-        compose.onNodeWithText("Channel 2").performClick()
+        compose.onNode(hasText("Channel 2") and hasClickAction()).performClick()
+        compose.onNode(hasText("Channel 2") and hasClickAction()).performClick()
         compose.onNodeWithText("Back from fullscreen").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithText("Channel 2").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Channel 2").assertIsFocused()
+        compose.onNode(hasText("Channel 2") and hasClickAction()).assertIsFocused()
     }
 }
