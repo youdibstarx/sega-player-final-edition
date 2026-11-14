@@ -30,11 +30,7 @@ internal class XtreamSource private constructor(
         val ext = extension.takeIf { it.matches(Regex("[A-Za-z0-9]{1,8}")) } ?: "mp4"
         return "$base/$kind/${encode(username)}/${encode(password)}/$id.$ext"
     }
-    fun artwork(value: String): String {
-        if (value.isBlank() || value == "null") return ""
-        return runCatching { URI("$base/").resolve(value.replace("&amp;", "&")).toString() }
-            .getOrDefault("").takeIf { it.startsWith("http://") || it.startsWith("https://") }.orEmpty()
-    }
+    fun artwork(value: String): String = ArtworkUrls.resolve(base, value)
     companion object {
         fun forEntry(item: Channel): XtreamSource? = from(item.sourceUrl) ?: runCatching {
             val uri = URI(item.url)
@@ -63,7 +59,7 @@ internal object XtreamCatalogue {
     private fun JSONObject.text(key: String) = optString(key, "").takeUnless { it == "null" }.orEmpty()
     private fun JSONArray.objects() = (0 until minOf(length(), LIMIT)).mapNotNull { optJSONObject(it) }
     internal fun request(url: String): String {
-        val con = URL(url).openConnection() as HttpURLConnection
+        val con = NetworkClient.open(URL(url))
         con.connectTimeout = 12000
         con.readTimeout = 18000
         con.setRequestProperty("Accept", "application/json")
@@ -96,7 +92,7 @@ internal object XtreamCatalogue {
             if (!id.matches(Regex("[0-9]+"))) return@mapNotNull null
             val name = item.text("name").ifBlank { return@mapNotNull null }
             val group = categories[item.text("category_id")].orEmpty().ifBlank { "Other" }
-            val cover = source.artwork(item.text(if (kind == "series") "cover" else "stream_icon"))
+            val cover = ArtworkUrls.fromJson(source.base, item, kind == "series")
             val url = if (kind == "series") "xtream-series:$fingerprint:$id"
                 else source.stream(if (kind == "vod") "movie" else "live", id,
                     if (kind == "live") "ts" else item.text("container_extension").ifBlank { "mp4" })
@@ -183,3 +179,4 @@ internal object XtreamCatalogue {
         parseEpisodes(source, show, request(source.api("get_series_info", show.seriesId)))
     }
 }
+

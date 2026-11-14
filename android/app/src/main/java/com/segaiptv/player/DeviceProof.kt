@@ -8,19 +8,21 @@ import java.security.MessageDigest
 import java.security.PrivateKey
 import java.security.Signature
 import java.security.spec.ECGenParameterSpec
-import java.util.Base64
+import android.util.Base64
 import java.util.UUID
 
 /** Proof of possession of an approved installation key, NOT app attestation. */
 internal object DeviceProof {
+    private val clock = ServerClock { android.os.SystemClock.elapsedRealtime() }
+    fun synchronize(seconds: Long) = clock.synchronize(seconds)
     private const val ALIAS = "sega_v3_request_signing_v1"
     internal fun canonical(id: String, method: String, path: String, body: String, time: String, nonce: String): ByteArray {
         val digest = MessageDigest.getInstance("SHA-256").digest(body.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it.toInt() and 255) }
         return listOf("SEGA-PROOF-1", id, method, path, digest, time, nonce).joinToString("\n").toByteArray(Charsets.UTF_8)
     }
-    internal fun sign(key: PrivateKey, data: ByteArray): String = Base64.getEncoder().encodeToString(
-        Signature.getInstance("SHA256withECDSA").run { initSign(key); update(data); sign() })
+    internal fun sign(key: PrivateKey, data: ByteArray): String = Base64.encodeToString(
+        Signature.getInstance("SHA256withECDSA").run { initSign(key); update(data); sign() }, Base64.NO_WRAP)
 
     fun fingerprint(): String = runCatching {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -38,11 +40,11 @@ internal object DeviceProof {
                     .setDigests(KeyProperties.DIGEST_SHA256).build())
             }.generateKeyPair()
         }
-        val time = (System.currentTimeMillis() / 1000).toString()
+        val time = clock.seconds().toString()
         val nonce = UUID.randomUUID().toString()
         val key = ks.getKey(ALIAS, null) as PrivateKey
         return mapOf("X-Proof-Time" to time, "X-Proof-Nonce" to nonce,
-            "X-Proof-Public-Key" to Base64.getEncoder().encodeToString(ks.getCertificate(ALIAS).publicKey.encoded),
+            "X-Proof-Public-Key" to Base64.encodeToString(ks.getCertificate(ALIAS).publicKey.encoded, Base64.NO_WRAP),
             "X-Proof-Signature" to sign(key, canonical(id, method, path, body.orEmpty(), time, nonce)))
     }
 }

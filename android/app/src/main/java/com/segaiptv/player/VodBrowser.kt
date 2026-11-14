@@ -1,10 +1,16 @@
 package com.segaiptv.player
 
+import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -17,8 +23,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -30,8 +41,21 @@ import coil.compose.AsyncImage
 fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, accent: Color,
     onPlay: (Channel) -> Unit, query: String = "", favorites: Set<String> = emptySet(),
     onToggleFavorite: (Channel) -> Unit = {}, loading: Boolean = false, warnings: String = "", showCategories: Boolean = true) {
-    val allTitles = remember(entries, series) { buildVodTitles(entries, series) }
-    val groups = remember(allTitles) { allTitles.groupBy { it.entries.first().category } }
+    val allTitles = rememberCatalogueWork<List<VodTitle>>(emptyList(), entries, series) { buildVodTitles(entries, series) }
+    val groups = rememberCatalogueWork<Map<String, List<VodTitle>>>(emptyMap(), allTitles) { allTitles.groupBy { it.entries.first().category } }
+    val posterContext = LocalContext.current
+    val isTvPosterBrowser = remember(posterContext) {
+        val pm = posterContext.packageManager
+        AudioDecoderPolicy.preferFfmpeg(
+            hasLeanback = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK),
+            tvUiMode = (posterContext.getSystemService(android.content.Context.UI_MODE_SERVICE)
+                as? android.app.UiModeManager)?.currentModeType ==
+                android.content.res.Configuration.UI_MODE_TYPE_TELEVISION,
+            hasTelevisionFeature = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEVISION),
+            hasTouchscreen = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN)
+        )
+    }
+    var posterRefresh by remember(series) { mutableIntStateOf(0) }
     var category by rememberSaveable(series) { mutableStateOf<String?>(null) }
     var detailId by rememberSaveable(series) { mutableStateOf<String?>(null) }
     var season by rememberSaveable(series) { mutableStateOf<Int?>(null) }
@@ -39,13 +63,24 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
     LaunchedEffect(query) {
         if (previousQuery != query) { detailId = null; previousQuery = query }
     }
-    val titles = remember(allTitles, category, query) {
+    val titles = rememberCatalogueWork<List<VodTitle>>(emptyList(), allTitles, groups, category, query) {
         (if (category == null || query.isNotBlank()) allTitles else groups[category].orEmpty())
             .filter { query.isBlank() || it.title.contains(query, true) || it.entries.any { e -> e.name.contains(query, true) } }
     }
     val detail = remember(allTitles, detailId) { allTitles.firstOrNull { it.id == detailId } }
+    val moviePlayFocus = remember { FocusRequester() }
+    val seasonFocus = remember { FocusRequester() }
     var remoteEpisodes by remember(detailId) { mutableStateOf<List<Channel>>(emptyList()) }
     var episodeLoading by remember(detailId) { mutableStateOf(false) }
+    LaunchedEffect(detailId, series, episodeLoading) {
+        if (detailId != null && !series) moviePlayFocus.requestFocus()
+        if (detailId != null && series && !episodeLoading) {
+            // The season buttons are rendered only after their catalogue is ready.
+            kotlinx.coroutines.yield()
+            try { seasonFocus.requestFocus() } catch (_: IllegalStateException) { }
+        }
+    }
+
     var episodeError by remember(detailId) { mutableStateOf(false) }
     var synopsis by remember(detailId) { mutableStateOf("") }
     var synopsisOpen by remember(detailId) { mutableStateOf(false) }
@@ -77,11 +112,14 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
         if (warnings.isNotBlank()) Text(statusText(warnings), color = v3Gold, fontSize = 10.sp, maxLines = 2)
         Text(tr(if (series) R.string.series_counts else R.string.movie_counts, groups.size, allTitles.size),
             color = Color.LightGray, fontSize = 10.sp, modifier = Modifier.padding(vertical = 5.dp))
+        if (isTvPosterBrowser && detail == null) {
+            TvAction(tr(R.string.refresh_posters)) { posterRefresh++ }
+        }
         if (detail != null) {
             val seasons = remember(detail, remoteEpisodes) { (if (remoteShow != null) remoteEpisodes else detail.entries).groupBy { episodeLabel(it).season } }
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Box(Modifier.fillMaxHeight().aspectRatio(2f / 3f).background(v3Panel), contentAlignment = Alignment.Center) {
-                    PosterArtwork(detail, Modifier.fillMaxSize())
+                    PosterArtwork(detail, Modifier.fillMaxSize(), posterRefresh)
                 }
                 Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     TvAction("‹ " + tr(R.string.library)) { detailId = null }
@@ -96,7 +134,7 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
                         } else if (!episodeLoading && seasons.isEmpty()) Text(tr(R.string.no_episodes), color = Color.LightGray)
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             items(seasons.keys.toList()) { n ->
-                                TvAction(n?.let { tr(R.string.season, it) } ?: tr(R.string.episodes), selected = season == n) { season = n }
+                                TvAction(n?.let { tr(R.string.season, it) } ?: tr(R.string.episodes), modifier = if (n == seasons.keys.first()) Modifier.focusRequester(seasonFocus) else Modifier, selected = season == n) { season = n }
                             }
                         }
                         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -122,7 +160,7 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TvAction(tr(R.string.synopsis)) { synopsisOpen = true }
-                            TvAction(tr(R.string.play_movie)) { onPlay(movie) }
+                            TvAction(tr(R.string.play_movie), modifier = Modifier.focusRequester(moviePlayFocus)) { onPlay(movie) }
                             TvAction((if (movie.url in favorites) "♥ " else "♡ ") + tr(R.string.favorite)) { onToggleFavorite(movie) }
                         }
                     }
@@ -151,7 +189,7 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
                                 season = episodeLabel(title.entries.first()).season
                             }.padding(4.dp)) {
                             Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f), contentAlignment = Alignment.Center) {
-                                PosterArtwork(title, Modifier.fillMaxSize())
+                                PosterArtwork(title, Modifier.fillMaxSize(), posterRefresh)
                             }
                             Text(title.title, color = if (focused) v3Gold else Color.White, fontSize = 12.sp,
                                 maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp))
@@ -165,37 +203,163 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
 }
 
 @Composable
-private fun PosterArtwork(title: VodTitle, modifier: Modifier) {
-    var imageLoaded by remember(title.cover) { mutableStateOf(false) }
+internal fun PosterArtwork(title: VodTitle, modifier: Modifier, refreshPosters: Int = 0) {
+    val context = LocalContext.current
+    val isTvBox = remember(context) {
+        val pm = context.packageManager
+        AudioDecoderPolicy.preferFfmpeg(
+            hasLeanback = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK),
+            tvUiMode = (context.getSystemService(android.content.Context.UI_MODE_SERVICE)
+                as? android.app.UiModeManager)?.currentModeType ==
+                android.content.res.Configuration.UI_MODE_TYPE_TELEVISION,
+            hasTelevisionFeature = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEVISION),
+            hasTouchscreen = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN)
+        )
+    }
+    val entry = remember(title.id, title.cover, refreshPosters) { title.entries.firstOrNull()?.copy(logo = title.cover) }
+    // Phones keep the existing one-time details fallback.
+    var attempt by remember(title.id, title.cover, refreshPosters) { mutableIntStateOf(0) }
+    var cover by remember(title.id, title.cover, refreshPosters) { mutableStateOf(title.cover) }
+    // On TV boxes, retries are bounded and delayed. An applied retry is a new
+    // image request with caches bypassed; this also recovers from stale URLs.
+    var tvRetryRequested by remember(title.id, title.cover, refreshPosters) { mutableIntStateOf(0) }
+    var tvRetryApplied by remember(title.id, title.cover, refreshPosters) { mutableIntStateOf(0) }
+    // A single effect owns metadata resolution. A retry/refresh cancels its
+    // predecessor so a slow initial lookup cannot overwrite a recovered URL.
+    LaunchedEffect(title.id, title.cover, attempt, tvRetryRequested, refreshPosters) {
+        if (entry == null) return@LaunchedEffect
+        val retryNumber = if (isTvBox) tvRetryRequested else 0
+        if (retryNumber > 0) kotlinx.coroutines.delay(PosterRetryPolicy.delayMillis(retryNumber))
+        val resolved = PosterRepository.resolve(context, entry,
+            forceDetails = (isTvBox && (retryNumber == 1 || refreshPosters > 0)) ||
+                (!isTvBox && attempt > 0))
+        cover = resolved
+        tvRetryApplied = retryNumber
+        if (isTvBox && resolved.isBlank() && XtreamSource.forEntry(entry) != null &&
+            retryNumber < PosterRetryPolicy.MAX_RETRIES
+        ) tvRetryRequested = retryNumber + 1
+    }
+    val requestAttempt = tvRetryApplied
+    val requestGeneration = "$refreshPosters:$requestAttempt"
+    val request = remember(cover, context, tvRetryApplied, refreshPosters) {
+        coil.request.ImageRequest.Builder(context).data(cover).size(360, 540).allowHardware(false)
+            .apply {
+                if (isTvBox) {
+                    // Distinguish same-URL requests without multiplying cache
+                    // entries. Ignore callbacks from superseded generations.
+                    setParameter("sega_poster_generation", requestGeneration, memoryCacheKey = null)
+                }
+                if (isTvBox && (tvRetryApplied > 0 || refreshPosters > 0)) {
+                    memoryCachePolicy(coil.request.CachePolicy.DISABLED)
+                    diskCachePolicy(coil.request.CachePolicy.DISABLED)
+                }
+            }.build()
+    }
+    var imageLoaded by remember(title.id, request) { mutableStateOf(false) }
     Box(modifier.background(appTheme.row), contentAlignment = Alignment.Center) {
         if (!imageLoaded) Text(tr(R.string.no_cover), color = Color.LightGray, fontSize = 11.sp,
             modifier = Modifier.padding(10.dp))
-        if (title.cover.isNotBlank()) AsyncImage(title.cover, title.title,
+        // Recreate the painter even when a refresh resolves to the same URL
+        // and the same cache policy as the last failed request.
+        if (cover.isNotBlank()) key(title.id, refreshPosters, tvRetryApplied) {
+            AsyncImage(request, title.title,
             Modifier.fillMaxSize(), contentScale = ContentScale.Fit,
-            onSuccess = { imageLoaded = true }, onError = { imageLoaded = false })
+            onSuccess = { state ->
+                if (!isTvBox || (requestAttempt == tvRetryApplied &&
+                    state.result.request.parameters.value<String>("sega_poster_generation") == requestGeneration)
+                ) imageLoaded = true
+            },
+            onError = posterError@ { state ->
+                if (isTvBox && (requestAttempt != tvRetryApplied ||
+                    state.result.request.parameters.value<String>("sega_poster_generation") != requestGeneration)
+                ) return@posterError
+                imageLoaded = false
+                if (!isTvBox) {
+                    if (attempt == 0) attempt = 1
+                } else {
+                    val reason = state.result.throwable
+                    // Never log poster URLs; some Xtream URLs contain credentials.
+                    android.util.Log.w("SEGA_POSTER",
+                        "TV cover failed: " + PosterRetryPolicy.failureCategory(reason) +
+                            ", retry=" + requestAttempt)
+                    if (tvRetryRequested == requestAttempt &&
+                        PosterRetryPolicy.retryAllowed(requestAttempt, reason)
+                    ) tvRetryRequested = requestAttempt + 1
+                }
+            })
+        }
     }
 }
 
 @Composable
-fun PlaylistScreen(config: AppConfig, loading: Boolean, warnings: String, onRefresh: () -> Unit,
-    onLocalFile: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxSize()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TvAction(tr(R.string.refresh_playlists), onClick = onRefresh)
-            TvAction(tr(R.string.open_m3u), onClick = onLocalFile)
-        }
-        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 12.dp), color = v3Gold)
-        if (warnings.isNotBlank()) Text(statusText(warnings), color = v3Gold)
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 16.dp)) {
-            items(config.playlists) { playlist ->
-                Column(Modifier.fillMaxWidth().background(v3Panel).padding(16.dp)) {
-                    Text(playlist.name, color = Color.White, fontSize = 19.sp)
-                    Text(tr(R.string.managed_playlist), color = Color.LightGray)
+fun PlaylistScreen(config: AppConfig, identity: DeviceIdentity, loading: Boolean, warnings: String,
+    onRefresh: () -> Unit, onLocalFile: () -> Unit, onCopyMac: () -> Unit,
+    onCopyKey: () -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.weight(1.65f).fillMaxHeight()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                TvAction(tr(R.string.refresh_playlists), onClick = onRefresh)
+                TvAction(tr(R.string.open_m3u), onClick = onLocalFile)
+            }
+            if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 10.dp), color = v3Gold)
+            if (warnings.isNotBlank()) Text(statusText(warnings), color = v3Gold, fontSize = 11.sp,
+                maxLines = 2, modifier = Modifier.padding(top = 6.dp))
+            Text(tr(R.string.subscriptions_title), color = Color.White, fontSize = 16.sp,
+                fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 8.dp)) {
+                items(config.playlists, key = { it.id }) { playlist ->
+                    SubscriptionCard(playlist, Modifier.fillMaxWidth())
+                }
+                if (config.playlists.isEmpty()) item {
+                    Row(Modifier.fillMaxWidth().background(v3Panel, RoundedCornerShape(14.dp)).padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("▤", color = v3Gold, fontSize = 28.sp)
+                        Text(tr(R.string.no_playlists), color = Color.LightGray, fontSize = 13.sp)
+                    }
                 }
             }
-            if (config.playlists.isEmpty()) item { Text(tr(R.string.no_playlists), color = Color.LightGray) }
         }
+        DeviceActivationCard(identity, onCopyMac, onCopyKey, Modifier.weight(1f).fillMaxHeight())
     }
 }
 
+@Composable
+private fun DeviceActivationCard(identity: DeviceIdentity, onCopyMac: () -> Unit,
+    onCopyKey: () -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val qr = remember(identity.virtualMac, identity.key) {
+        val matrix = deviceQrMatrix(identity.virtualMac, identity.key)
+        val pixels = IntArray(matrix.width * matrix.height) { index ->
+            if (matrix[index % matrix.width, index / matrix.width]) android.graphics.Color.BLACK
+            else android.graphics.Color.WHITE
+        }
+        Bitmap.createBitmap(pixels, matrix.width, matrix.height, Bitmap.Config.ARGB_8888).asImageBitmap()
+    }
+    Column(modifier.background(v3Panel, RoundedCornerShape(16.dp)).padding(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Text("⌁  SEGA PLAYER", color = v3Gold, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Image(qr, tr(R.string.qr_description), Modifier.size(96.dp), filterQuality = FilterQuality.None)
+        Text(tr(R.string.scan_qr), color = Color.LightGray, fontSize = 9.sp)
+        DeviceIdentityLine(tr(R.string.virtual_mac), identity.virtualMac, "⌘", onCopyMac)
+        DeviceIdentityLine(tr(R.string.device_key), identity.key, "▣", onCopyKey)
+        Text("↗  faster4k.xyz", color = v3Gold, fontSize = 12.sp,
+            modifier = Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://faster4k.xyz"))) }
+                .padding(vertical = 2.dp))
+    }
+}
+
+@Composable
+private fun DeviceIdentityLine(label: String, value: String, icon: String, onCopy: () -> Unit) {
+    Row(Modifier.fillMaxWidth().background(Color.White.copy(alpha = .05f), RoundedCornerShape(10.dp))
+        .clickable(onClick = onCopy).padding(horizontal = 8.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Text(icon, color = v3Gold, fontSize = 15.sp)
+        Column(Modifier.weight(1f)) {
+            Text(label, color = Color.LightGray, fontSize = 8.sp)
+            Text(value, color = Color.White, fontSize = 10.sp, maxLines = 1)
+        }
+        Text("⧉", color = Color.LightGray, fontSize = 12.sp)
+    }
+}
 

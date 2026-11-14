@@ -121,5 +121,39 @@
     <string name="update_failed">No se pudo comprobar o instalar la actualización. Inténtalo de nuevo.</string>
     <string name="update_downloading">Descargando y verificando el APK…</string>
     <string name="update_permission">Permite esta fuente, vuelve y pulsa Actualizar.</string>
+
+    <string name="subscriptions_title">Mis suscripciones</string>
+    <string name="connection_settings">Conexión</string>
+    <string name="dns_hint">El DNS se aplica a esta app. Reinicia la reproducción tras cambiarlo. Un VPN activo usa su DNS.</string>
+    <string name="dns_automatic">Automático · DNS del dispositivo</string>
+    <string name="vpn_hint">Importa tu perfil WireGuard .conf. Solo esta app usa el VPN, según el perfil. Sustituye otro VPN activo. Sin reconexión automática ni bloqueo fuera del VPN.</string>
+    <string name="vpn_connected">Túnel VPN activado</string>
+    <string name="vpn_disconnected">VPN desconectado</string>
+    <string name="vpn_profile_saved">Perfil guardado de forma segura en este dispositivo</string>
+    <string name="vpn_import">Importar WireGuard .conf</string>
+    <string name="vpn_connect">Conectar VPN</string>
+    <string name="vpn_disconnect">Desconectar VPN</string>
+    <string name="vpn_remove">Eliminar perfil</string>
+    <string name="vpn_error">No se pudo completar. Revisa el perfil WireGuard y el permiso VPN de Android.</string>
+    <string name="weather_choose">Elegir ciudad del tiempo</string>
+    <string name="weather_unavailable">Tiempo no disponible</string>
+    <string name="weather_loading">Cargando el tiempo…</string>
+    <string name="weather_attribution">Pronóstico: MET Norway · CC BY 4.0</string>
+    <string name="weather_privacy">Elige una ciudad para enviar sus coordenadas a MET Norway. No se usa GPS.</string>
+    <string name="weather_custom">Otra ciudad (coordenadas)</string>
+    <string name="weather_city">Nombre de ciudad</string>
+    <string name="weather_lat">Latitud (ej. 33.59)</string>
+    <string name="weather_lon">Longitud (ej. -7.62)</string>
+    <string name="weather_disable">Ocultar el tiempo</string>
+    <string name="app_activation_expiry">Caducidad de activación</string>
+    <string name="provider_expiry">Caducidad de suscripción M3U</string>
+    <string name="subscription_loading">Comprobando…</string>
+    <string name="subscription_unknown">Caducidad no disponible</string>
+    <string name="subscription_expired">Caducado</string>
+    <string name="subscription_unlimited">Ilimitado</string>
+    <string name="subscription_days">Quedan %1$d días</string>
+    <string name="connection_and_updates">Conexión y actualizaciones</string>
+    <string name="refresh_posters">Actualizar carteles</string>
 </resources>
+
 

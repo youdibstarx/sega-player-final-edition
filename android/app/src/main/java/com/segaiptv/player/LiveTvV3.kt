@@ -6,12 +6,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -41,19 +44,37 @@ fun TvAction(label: String, modifier: Modifier = Modifier, selected: Boolean = f
 fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Boolean,
     favorites: Set<String>, warnings: String, onPlay: (Channel) -> Unit,
     onToggleFavorite: (Channel) -> Unit, includeVod: Boolean = false, search: String = "", showCategories: Boolean = true, orderScope: String? = null) {
-    val live = remember(channels, includeVod) {
-        if (includeVod) channels else channels.filter { !isVodEntry(it, false) && !isVodEntry(it, true) }
+    val live = rememberCatalogueWork<List<Channel>>(emptyList(), channels, includeVod) {
+        if (includeVod) channels else channels.filter { catalogueKind(it) == "live" }
     }
-    val groups = remember(live) { live.groupBy { it.category.ifBlank { "Other" } } }
+    val groups = rememberCatalogueWork<Map<String, List<Channel>>>(emptyMap(), live) { live.groupBy { it.category.ifBlank { "Other" } } }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     var onlyFavorites by rememberSaveable { mutableStateOf(false) }
     var selectedUrl by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(groups) { if (category !in groups) category = groups.keys.firstOrNull() }
-    val filtered = remember(live, groups, category, onlyFavorites, favorites, search) {
+    val filtered = rememberCatalogueWork<List<Channel>>(emptyList(), live, groups, category, onlyFavorites, favorites, search) {
         (if (onlyFavorites) live.filter { it.url in favorites } else if (search.isNotBlank()) live else groups[category].orEmpty())
             .filter { search.isBlank() || it.name.contains(search, true) }
     }
     val visible = if (orderScope == null) filtered else orderedChannels(orderScope, filtered, live, search.isBlank() && !onlyFavorites)
+    val channelListState = rememberLazyListState()
+    val selectedFocus = remember { FocusRequester() }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val lastPlayedUrl = remember { ViewerStore.get(context).history(false).firstOrNull()?.channel?.url }
+    var restoredSelection by remember { mutableStateOf(false) }
+    LaunchedEffect(visible) {
+        if (visible.isEmpty()) return@LaunchedEffect
+        if (!restoredSelection) {
+            lastPlayedUrl?.takeIf { url -> visible.any { it.url == url } }?.let { selectedUrl = it }
+            restoredSelection = true
+        }
+        val index = visible.indexOfFirst { it.url == selectedUrl }
+        if (index >= 0) {
+            channelListState.scrollToItem(index + (if (showCategories) 0 else 1) + (if (loading) 1 else 0))
+            kotlinx.coroutines.yield()
+            try { selectedFocus.requestFocus() } catch (_: IllegalStateException) { }
+        }
+    }
     var epgOpen by remember(selectedUrl) { mutableStateOf(false) }
     val selected = remember(live, selectedUrl) { live.firstOrNull { it.url == selectedUrl } }
     if (epgOpen && selected != null) EpgDialog(selected) { epgOpen = false }
@@ -73,7 +94,7 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
                     }
                 }
             }
-            LazyColumn(Modifier.weight(1.12f).fillMaxHeight().background(v3Panel),
+            LazyColumn(Modifier.weight(1.12f).fillMaxHeight().background(v3Panel), state = channelListState,
                 verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (!showCategories) item {
                     TvAction(tr(R.string.favorites_count, live.count { it.url in favorites }), Modifier.fillMaxWidth(), onlyFavorites) {
@@ -85,7 +106,9 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
                 itemsIndexed(visible, key = { i, ch -> "$i-${ch.url}" }) { index, ch ->
                     var focused by remember { mutableStateOf(false) }
                     val active = ch.url == selectedUrl
-                    Row(Modifier.fillMaxWidth().height(34.dp).onFocusChanged { focused = it.isFocused }
+                    Row(Modifier.fillMaxWidth().height(34.dp)
+                        .then(if (active) Modifier.focusRequester(selectedFocus) else Modifier)
+                        .onFocusChanged { focused = it.isFocused }
                         .background(if (active || focused) appTheme.selected else appTheme.row)
                         .border(if (focused) 2.dp else 0.dp, if (focused) v3Gold else Color.Transparent)
                         .clickable { if (selectedUrl == ch.url) onPlay(ch) else selectedUrl = ch.url }.padding(horizontal = 8.dp),
@@ -118,4 +141,5 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
         }
     }
 }
+
 

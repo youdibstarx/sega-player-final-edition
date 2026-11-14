@@ -10,6 +10,13 @@ import org.json.JSONObject
 /** Explicit server denial, distinct from a temporary network failure. No response data retained. */
 internal class BackendAccessDenied : IllegalStateException("Backend access denied")
 
+/** Non-authentication HTTP status; does not contain server responses or credentials. */
+internal class BackendHttpError(val statusCode: Int) : IllegalStateException("Backend HTTP $statusCode")
+
+internal class BackendTransportFailure(val reason: Reason) : IllegalStateException() {
+    enum class Reason { DNS, TLS, TIMEOUT, CONNECTION, UNKNOWN }
+}
+
 /** Applies only to the control panel. Provider media URLs have independent transport requirements. */
 internal object BackendTransport {
     internal const val MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -34,7 +41,7 @@ internal object BackendTransport {
         return output.toString("UTF-8")
     }
     internal fun request(base: String, path: String, method: String, payload: String? = null,
-        deviceKey: String? = null, proofHeaders: Map<String, String> = emptyMap(), open: (URL) -> HttpsURLConnection = { it.openConnection() as HttpsURLConnection }): JSONObject {
+        deviceKey: String? = null, proofHeaders: Map<String, String> = emptyMap(), open: (URL) -> HttpsURLConnection = { NetworkClient.open(it) as HttpsURLConnection }): JSONObject {
         val url = endpoint(base, path)
         var connection: HttpsURLConnection? = null
         try {
@@ -58,20 +65,29 @@ internal object BackendTransport {
             val status = con.responseCode
             if (status == 401 || status == 403) throw BackendAccessDenied()
             // Never follow a Location header carrying a device key or registration body.
-            check(status in 200..299) { "Backend request rejected" }
+            if (status !in 200..299) throw BackendHttpError(status)
             check(con.contentLengthLong <= MAX_RESPONSE_BYTES) { "Backend response too large" }
             return con.inputStream.use { JSONObject(readBounded(it)) }
+        } catch (http: BackendHttpError) {
+            throw http
         } catch (denied: BackendAccessDenied) {
             throw denied
+        } catch (failure: BackendTransportFailure) {
+            throw failure
+        } catch (_: java.net.UnknownHostException) {
+            throw BackendTransportFailure(BackendTransportFailure.Reason.DNS)
         } catch (_: javax.net.ssl.SSLException) {
-            throw IllegalStateException("Backend TLS verification failed")
+            throw BackendTransportFailure(BackendTransportFailure.Reason.TLS)
         } catch (_: java.net.SocketTimeoutException) {
-            throw IllegalStateException("Backend request timed out")
+            throw BackendTransportFailure(BackendTransportFailure.Reason.TIMEOUT)
+        } catch (_: java.net.ConnectException) {
+            throw BackendTransportFailure(BackendTransportFailure.Reason.CONNECTION)
         } catch (_: Exception) {
             // Do not propagate server bodies, URLs, request headers or nested exception messages.
-            throw IllegalStateException("Backend request failed")
+            throw BackendTransportFailure(BackendTransportFailure.Reason.UNKNOWN)
         } finally { connection?.disconnect() }
     }
 }
+
 
 
