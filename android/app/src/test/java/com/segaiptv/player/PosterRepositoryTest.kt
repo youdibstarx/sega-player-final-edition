@@ -51,6 +51,25 @@ class PosterRepositoryTest {
         })
         assertEquals("https://images.test/new.jpg", PosterRepository.resolve(c, e) { error("Reuse recovered URL") })
     }
+    @Test fun emptyOrFailedArtworkLookupDoesNotPoisonFutureVisits() = runBlocking {
+        val c = RuntimeEnvironment.getApplication()
+        val missing = movie(98231)
+        var requests = 0
+        assertEquals("", PosterRepository.resolve(c, missing) {
+            requests++
+            error("Temporary provider timeout")
+        })
+        assertEquals("", PosterRepository.resolve(c, missing) {
+            requests++
+            """{"info":{"movie_image":""}}"""
+        })
+        assertEquals("https://images.test/recovered.jpg", PosterRepository.resolve(c, missing) {
+            requests++
+            """{"info":{"movie_image":"https://images.test/recovered.jpg"}}"""
+        })
+        assertEquals(3, requests)
+    }
+
     @Test fun seriesUsesSeriesIdAndMetadataRequestsAreBounded() = runBlocking {
         val active = AtomicInteger(); val peak = AtomicInteger()
         val c = RuntimeEnvironment.getApplication()
