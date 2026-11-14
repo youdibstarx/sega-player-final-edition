@@ -21,7 +21,16 @@ jobs:
         working-directory: panel
         run: python -m unittest discover -s tests -v
       - name: Verify container packaging
-        run: docker build -t sega-panel-security-test panel
+        run: |
+          docker build -t sega-panel-security-test panel
+          docker run -d --name sega-panel-qa -p 127.0.0.1:8767:8000 sega-panel-security-test
+          trap 'docker rm -f sega-panel-qa' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8767/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs sega-panel-qa
+          exit 1
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
