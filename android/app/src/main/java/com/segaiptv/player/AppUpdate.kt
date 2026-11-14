@@ -32,6 +32,12 @@ private fun ByteArray.hex() = joinToString("") { "%02x".format(it.toInt() and 25
 internal fun needsUpdateInstallPermission(sdk: Int, allowed: () -> Boolean): Boolean =
     sdk >= 26 && !allowed()
 
+// The verified temporary file is created in the destination directory. Android's
+// File.renameTo uses rename(2), replacing the cached APK without API26 java.nio.
+internal fun commitVerifiedUpdate(source: File, destination: File) {
+    check(source.renameTo(destination)) { "Unable to commit verified update" }
+}
+
 private fun <T> fetchReleaseFile(name: String, read: (InputStream) -> T): T {
     val url = URL(BackendAddress.value().trimEnd('/') + "/sega-updates/" + name)
     val connection = NetworkClient.open(url) as HttpsURLConnection
@@ -83,7 +89,7 @@ private suspend fun downloadVerified(context: Context, release: Release): File =
         check(info.versionCode == release.code && release.code > BuildConfig.VERSION_CODE)
         check(AppAuthenticity.matchesOwner(info.packageName, signers,
             requireNotNull(info.applicationInfo).flags and ApplicationInfo.FLAG_DEBUGGABLE != 0))
-        java.nio.file.Files.move(temp.toPath(), apk.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        commitVerifiedUpdate(temp, apk)
         apk
     } finally { temp.delete() }
 }
@@ -149,4 +155,3 @@ internal fun rememberUpdatePrompt(): () -> Unit {
         }, dismissButton = { TextButton(onClick = { shown = false }) { Text(tr(R.string.close)) } })
     return { check(true) }
 }
-

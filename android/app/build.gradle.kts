@@ -14,8 +14,8 @@ android {
         applicationId = "com.segaiptv.player"
         minSdk = 24
         targetSdk = 35
-        versionCode = 46
-        versionName = "0.5.28"
+        versionCode = 47
+        versionName = "0.5.29"
         // Android Emulator: 10.0.2.2; physical device: your PC LAN IP / domain.
         val backendUrl = providers.gradleProperty("SEGA_IPTV_BACKEND_URL")
             .orElse("https://tchach.online").get()
@@ -112,10 +112,3 @@ dependencies {
     testImplementation("org.json:json:20240303")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
-
-
-
-
-
-
-
