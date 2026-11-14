@@ -51,7 +51,36 @@ internal object NetworkClient {
         context = app.applicationContext
         mode = runCatching { DnsMode.valueOf(app.getSharedPreferences("network", Context.MODE_PRIVATE)
             .getString("dns", DnsMode.AUTOMATIC.name)!!) }.getOrDefault(DnsMode.AUTOMATIC)
-        coil.Coil.setImageLoader(coil.ImageLoader.Builder(app).okHttpClient(client).build())
+        // Coil uses its own OkHttp dispatcher on TV boxes so a large poster
+        // grid cannot starve catalogue / playback connections.
+        val pm = app.packageManager
+        val isTvBox = AudioDecoderPolicy.preferFfmpeg(
+            hasLeanback = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK),
+            tvUiMode = (app.getSystemService(Context.UI_MODE_SERVICE) as? android.app.UiModeManager)
+                ?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION,
+            hasTelevisionFeature = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEVISION),
+            hasTouchscreen = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN)
+        )
+        val loader = coil.ImageLoader.Builder(app)
+        if (isTvBox) {
+            val imageDispatcher = okhttp3.Dispatcher().apply {
+                maxRequests = 6
+                maxRequestsPerHost = 3
+            }
+            val posterClient = client.newBuilder()
+                .dispatcher(imageDispatcher)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .callTimeout(40, TimeUnit.SECONDS)
+                .build()
+            loader.okHttpClient(posterClient)
+            loader.memoryCache {
+                coil.memory.MemoryCache.Builder(app).maxSizePercent(0.10).build()
+            }
+        } else {
+            // Keep the working phone image pipeline unchanged.
+            loader.okHttpClient(client)
+        }
+        coil.Coil.setImageLoader(loader.build())
     }
     fun select(app: Context, selected: DnsMode) {
         mode = selected

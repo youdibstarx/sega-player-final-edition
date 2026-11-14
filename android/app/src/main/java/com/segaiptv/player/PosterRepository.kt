@@ -69,8 +69,10 @@ internal object PosterRepository {
                         if (series) "series_id" else "vod_id"))
                 }
                 val url = ArtworkUrls.details(source.base, raw, series).ifBlank { original }
-                synchronized(memory) { memory[key] = url }
+                // Do not retain an empty result as a permanent cache hit.
+                // A missing provider poster can become available on the next visit.
                 if (url.isNotBlank()) {
+                    synchronized(memory) { memory[key] = url }
                     val edit = prefs.edit()
                     if (prefs.all.size >= 512) prefs.all.keys.take(64).forEach { edit.remove(it) }
                     edit.putString(key, url).apply()
@@ -78,7 +80,8 @@ internal object PosterRepository {
                 url
             } catch (ex: Exception) {
                 if (ex is CancellationException) throw ex
-                synchronized(memory) { memory[key] = original }
+                // A timeout or TLS failure must not poison the metadata
+                // cache. The existing catalogue URL remains a usable fallback.
                 original
             }
         }

@@ -43,6 +43,19 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
     onToggleFavorite: (Channel) -> Unit = {}, loading: Boolean = false, warnings: String = "", showCategories: Boolean = true) {
     val allTitles = rememberCatalogueWork<List<VodTitle>>(emptyList(), entries, series) { buildVodTitles(entries, series) }
     val groups = rememberCatalogueWork<Map<String, List<VodTitle>>>(emptyMap(), allTitles) { allTitles.groupBy { it.entries.first().category } }
+    val posterContext = LocalContext.current
+    val isTvPosterBrowser = remember(posterContext) {
+        val pm = posterContext.packageManager
+        AudioDecoderPolicy.preferFfmpeg(
+            hasLeanback = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK),
+            tvUiMode = (posterContext.getSystemService(android.content.Context.UI_MODE_SERVICE)
+                as? android.app.UiModeManager)?.currentModeType ==
+                android.content.res.Configuration.UI_MODE_TYPE_TELEVISION,
+            hasTelevisionFeature = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEVISION),
+            hasTouchscreen = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN)
+        )
+    }
+    var posterRefresh by remember(series) { mutableIntStateOf(0) }
     var category by rememberSaveable(series) { mutableStateOf<String?>(null) }
     var detailId by rememberSaveable(series) { mutableStateOf<String?>(null) }
     var season by rememberSaveable(series) { mutableStateOf<Int?>(null) }
@@ -99,11 +112,14 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
         if (warnings.isNotBlank()) Text(statusText(warnings), color = v3Gold, fontSize = 10.sp, maxLines = 2)
         Text(tr(if (series) R.string.series_counts else R.string.movie_counts, groups.size, allTitles.size),
             color = Color.LightGray, fontSize = 10.sp, modifier = Modifier.padding(vertical = 5.dp))
+        if (isTvPosterBrowser && detail == null) {
+            TvAction(tr(R.string.refresh_posters)) { posterRefresh++ }
+        }
         if (detail != null) {
             val seasons = remember(detail, remoteEpisodes) { (if (remoteShow != null) remoteEpisodes else detail.entries).groupBy { episodeLabel(it).season } }
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Box(Modifier.fillMaxHeight().aspectRatio(2f / 3f).background(v3Panel), contentAlignment = Alignment.Center) {
-                    PosterArtwork(detail, Modifier.fillMaxSize())
+                    PosterArtwork(detail, Modifier.fillMaxSize(), posterRefresh)
                 }
                 Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     TvAction("‹ " + tr(R.string.library)) { detailId = null }
@@ -173,7 +189,7 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
                                 season = episodeLabel(title.entries.first()).season
                             }.padding(4.dp)) {
                             Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f), contentAlignment = Alignment.Center) {
-                                PosterArtwork(title, Modifier.fillMaxSize())
+                                PosterArtwork(title, Modifier.fillMaxSize(), posterRefresh)
                             }
                             Text(title.title, color = if (focused) v3Gold else Color.White, fontSize = 12.sp,
                                 maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp))
@@ -187,24 +203,76 @@ fun VodBrowser(modifier: Modifier, entries: List<Channel>, series: Boolean, acce
 }
 
 @Composable
-internal fun PosterArtwork(title: VodTitle, modifier: Modifier) {
+internal fun PosterArtwork(title: VodTitle, modifier: Modifier, refreshPosters: Int = 0) {
     val context = LocalContext.current
-    val entry = remember(title.id, title.cover) { title.entries.firstOrNull()?.copy(logo = title.cover) }
-    var attempt by remember(title.id, title.cover) { mutableIntStateOf(0) }
-    var cover by remember(title.id, title.cover) { mutableStateOf(title.cover) }
-    var imageLoaded by remember(title.id, cover) { mutableStateOf(false) }
-    LaunchedEffect(title.id, title.cover, attempt) {
-        if (entry != null) cover = PosterRepository.resolve(context, entry, forceDetails = attempt > 0)
+    val isTvBox = remember(context) {
+        val pm = context.packageManager
+        AudioDecoderPolicy.preferFfmpeg(
+            hasLeanback = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK),
+            tvUiMode = (context.getSystemService(android.content.Context.UI_MODE_SERVICE)
+                as? android.app.UiModeManager)?.currentModeType ==
+                android.content.res.Configuration.UI_MODE_TYPE_TELEVISION,
+            hasTelevisionFeature = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEVISION),
+            hasTouchscreen = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN)
+        )
     }
-    val request = remember(cover, context) {
-        coil.request.ImageRequest.Builder(context).data(cover).size(360, 540).allowHardware(false).build()
+    val entry = remember(title.id, title.cover, refreshPosters) { title.entries.firstOrNull()?.copy(logo = title.cover) }
+    // Phones keep the existing one-time details fallback.
+    var attempt by remember(title.id, title.cover, refreshPosters) { mutableIntStateOf(0) }
+    var cover by remember(title.id, title.cover, refreshPosters) { mutableStateOf(title.cover) }
+    // On TV boxes, retries are bounded and delayed. An applied retry is a new
+    // image request with caches bypassed; this also recovers from stale URLs.
+    var tvRetryRequested by remember(title.id, title.cover, refreshPosters) { mutableIntStateOf(0) }
+    var tvRetryApplied by remember(title.id, title.cover, refreshPosters) { mutableIntStateOf(0) }
+    var imageLoaded by remember(title.id, cover) { mutableStateOf(false) }
+    LaunchedEffect(title.id, title.cover, attempt, refreshPosters) {
+        if (entry != null) {
+            val resolved = PosterRepository.resolve(context, entry,
+                forceDetails = (isTvBox && refreshPosters > 0) || (!isTvBox && attempt > 0))
+            cover = resolved
+            if (isTvBox && resolved.isBlank() && XtreamSource.forEntry(entry) != null &&
+                tvRetryRequested == 0
+            ) tvRetryRequested = 1
+        }
+    }
+    LaunchedEffect(title.id, title.cover, tvRetryRequested) {
+        if (!isTvBox || tvRetryRequested == 0 || entry == null) return@LaunchedEffect
+        kotlinx.coroutines.delay(PosterRetryPolicy.delayMillis(tvRetryRequested))
+        // One forced provider-details lookup can find a replacement cover.
+        val updated = PosterRepository.resolve(context, entry, forceDetails = tvRetryRequested == 1)
+        if (updated.isNotBlank()) cover = updated
+        tvRetryApplied = tvRetryRequested
+    }
+    val request = remember(cover, context, tvRetryApplied, refreshPosters) {
+        coil.request.ImageRequest.Builder(context).data(cover).size(360, 540).allowHardware(false)
+            .apply {
+                if (isTvBox && (tvRetryApplied > 0 || refreshPosters > 0)) {
+                    memoryCachePolicy(coil.request.CachePolicy.DISABLED)
+                    diskCachePolicy(coil.request.CachePolicy.DISABLED)
+                }
+            }.build()
     }
     Box(modifier.background(appTheme.row), contentAlignment = Alignment.Center) {
         if (!imageLoaded) Text(tr(R.string.no_cover), color = Color.LightGray, fontSize = 11.sp,
             modifier = Modifier.padding(10.dp))
         if (cover.isNotBlank()) AsyncImage(request, title.title,
             Modifier.fillMaxSize(), contentScale = ContentScale.Fit,
-            onSuccess = { imageLoaded = true }, onError = { imageLoaded = false; if (attempt == 0) attempt = 1 })
+            onSuccess = { imageLoaded = true },
+            onError = { state ->
+                imageLoaded = false
+                if (!isTvBox) {
+                    if (attempt == 0) attempt = 1
+                } else {
+                    val reason = state.result.throwable
+                    // Never log poster URLs; some Xtream URLs contain credentials.
+                    android.util.Log.w("SEGA_POSTER",
+                        "TV cover failed: " + PosterRetryPolicy.failureCategory(reason) +
+                            ", retry=" + tvRetryApplied)
+                    if (tvRetryRequested == tvRetryApplied &&
+                        PosterRetryPolicy.retryAllowed(tvRetryApplied, reason)
+                    ) tvRetryRequested++
+                }
+            })
     }
 }
 

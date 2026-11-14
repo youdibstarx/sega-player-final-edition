@@ -153,6 +153,7 @@
     <string name="subscription_unlimited">غير محدود</string>
     <string name="subscription_days">متبقي %1$d يوم</string>
     <string name="connection_and_updates">الاتصال والتحديثات</string>
+    <string name="refresh_posters">تحديث صور الأفلام والمسلسلات</string>
 </resources>
 
 
