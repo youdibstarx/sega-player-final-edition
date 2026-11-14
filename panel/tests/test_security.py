@@ -63,6 +63,14 @@ class SecurityTests(unittest.TestCase):
         bad={'Authorization':'Basic '+base64.b64encode(b'qa:wrong').decode()}
         for _ in range(30): self.assertEqual(self.client.get('/admin/api/state',headers=bad).status_code,401)
         self.assertEqual(self.client.get('/admin/api/state',headers=bad).status_code,429)
+    def test_successful_admin_requests_do_not_consume_failed_login_budget(self):
+        for _ in range(35):
+            self.assertEqual(self.client.get('/admin/api/state', headers=self.auth).status_code, 200)
+        bad = {'Authorization': 'Basic ' + base64.b64encode(b'qa:wrong').decode()}
+        for _ in range(30):
+            self.assertEqual(self.client.get('/admin/api/state', headers=bad).status_code, 401)
+        self.assertEqual(self.client.get('/admin/api/state', headers=bad).status_code, 429)
+        self.assertEqual(self.client.get('/admin/api/state', headers=self.auth).status_code, 200)
     def test_csrf(self):
         payload={'name':'Demo','url':'https://example.org/list.m3u'}
         for headers in (self.auth,{**self.headers,'Origin':'https://evil.example'}):
