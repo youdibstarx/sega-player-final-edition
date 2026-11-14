@@ -34,15 +34,15 @@ jobs:
           APK=android/app/build/outputs/apk/hardened/app-hardened-unsigned.apk
           test "$(apkanalyzer manifest debuggable "$APK")" = "false"
           test "$(apkanalyzer manifest application-id "$APK")" = "com.segaiptv.player.v3.secure"
-          test "$(apkanalyzer manifest version-code "$APK")" = "44"
+          test "$(apkanalyzer manifest version-code "$APK")" = "45"
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "$APK"
           unzip -Z1 "$APK" | grep -Fq 'lib/arm64-v8a/libffmpegJNI.so'
           unzip -Z1 "$APK" | grep -Fq 'lib/armeabi-v7a/libffmpegJNI.so'
-          cp "$APK" dist/SEGA_PLAYER_V3_0.5.26_FFMPEG_UNSIGNED.apk
+          cp "$APK" dist/SEGA_PLAYER_V3_0.5.27_FFMPEG_UNSIGNED.apk
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" dist/apksigner.jar
       - uses: actions/upload-artifact@v4
         with:
-          name: SEGA-0.5.26-ffmpeg-unsigned
+          name: SEGA-0.5.27-ffmpeg-unsigned
           path: dist/
       - uses: actions/upload-artifact@v4
         if: always()
