@@ -224,41 +224,55 @@ internal fun PosterArtwork(title: VodTitle, modifier: Modifier, refreshPosters: 
     // image request with caches bypassed; this also recovers from stale URLs.
     var tvRetryRequested by remember(title.id, title.cover, refreshPosters) { mutableIntStateOf(0) }
     var tvRetryApplied by remember(title.id, title.cover, refreshPosters) { mutableIntStateOf(0) }
-    var imageLoaded by remember(title.id, cover) { mutableStateOf(false) }
-    LaunchedEffect(title.id, title.cover, attempt, refreshPosters) {
-        if (entry != null) {
-            val resolved = PosterRepository.resolve(context, entry,
-                forceDetails = (isTvBox && refreshPosters > 0) || (!isTvBox && attempt > 0))
-            cover = resolved
-            if (isTvBox && resolved.isBlank() && XtreamSource.forEntry(entry) != null &&
-                tvRetryRequested == 0
-            ) tvRetryRequested = 1
-        }
+    // A single effect owns metadata resolution. A retry/refresh cancels its
+    // predecessor so a slow initial lookup cannot overwrite a recovered URL.
+    LaunchedEffect(title.id, title.cover, attempt, tvRetryRequested, refreshPosters) {
+        if (entry == null) return@LaunchedEffect
+        val retryNumber = if (isTvBox) tvRetryRequested else 0
+        if (retryNumber > 0) kotlinx.coroutines.delay(PosterRetryPolicy.delayMillis(retryNumber))
+        val resolved = PosterRepository.resolve(context, entry,
+            forceDetails = (isTvBox && (retryNumber == 1 || refreshPosters > 0)) ||
+                (!isTvBox && attempt > 0))
+        cover = resolved
+        tvRetryApplied = retryNumber
+        if (isTvBox && resolved.isBlank() && XtreamSource.forEntry(entry) != null &&
+            retryNumber < PosterRetryPolicy.MAX_RETRIES
+        ) tvRetryRequested = retryNumber + 1
     }
-    LaunchedEffect(title.id, title.cover, tvRetryRequested) {
-        if (!isTvBox || tvRetryRequested == 0 || entry == null) return@LaunchedEffect
-        kotlinx.coroutines.delay(PosterRetryPolicy.delayMillis(tvRetryRequested))
-        // One forced provider-details lookup can find a replacement cover.
-        val updated = PosterRepository.resolve(context, entry, forceDetails = tvRetryRequested == 1)
-        if (updated.isNotBlank()) cover = updated
-        tvRetryApplied = tvRetryRequested
-    }
+    val requestAttempt = tvRetryApplied
+    val requestGeneration = "$refreshPosters:$requestAttempt"
     val request = remember(cover, context, tvRetryApplied, refreshPosters) {
         coil.request.ImageRequest.Builder(context).data(cover).size(360, 540).allowHardware(false)
             .apply {
+                if (isTvBox) {
+                    // Distinguish same-URL requests without multiplying cache
+                    // entries. Ignore callbacks from superseded generations.
+                    setParameter("sega_poster_generation", requestGeneration, memoryCacheKey = null)
+                }
                 if (isTvBox && (tvRetryApplied > 0 || refreshPosters > 0)) {
                     memoryCachePolicy(coil.request.CachePolicy.DISABLED)
                     diskCachePolicy(coil.request.CachePolicy.DISABLED)
                 }
             }.build()
     }
+    var imageLoaded by remember(title.id, request) { mutableStateOf(false) }
     Box(modifier.background(appTheme.row), contentAlignment = Alignment.Center) {
         if (!imageLoaded) Text(tr(R.string.no_cover), color = Color.LightGray, fontSize = 11.sp,
             modifier = Modifier.padding(10.dp))
-        if (cover.isNotBlank()) AsyncImage(request, title.title,
+        // Recreate the painter even when a refresh resolves to the same URL
+        // and the same cache policy as the last failed request.
+        if (cover.isNotBlank()) key(title.id, refreshPosters, tvRetryApplied) {
+            AsyncImage(request, title.title,
             Modifier.fillMaxSize(), contentScale = ContentScale.Fit,
-            onSuccess = { imageLoaded = true },
-            onError = { state ->
+            onSuccess = { state ->
+                if (!isTvBox || (requestAttempt == tvRetryApplied &&
+                    state.result.request.parameters.value<String>("sega_poster_generation") == requestGeneration)
+                ) imageLoaded = true
+            },
+            onError = posterError@ { state ->
+                if (isTvBox && (requestAttempt != tvRetryApplied ||
+                    state.result.request.parameters.value<String>("sega_poster_generation") != requestGeneration)
+                ) return@posterError
                 imageLoaded = false
                 if (!isTvBox) {
                     if (attempt == 0) attempt = 1
@@ -267,12 +281,13 @@ internal fun PosterArtwork(title: VodTitle, modifier: Modifier, refreshPosters: 
                     // Never log poster URLs; some Xtream URLs contain credentials.
                     android.util.Log.w("SEGA_POSTER",
                         "TV cover failed: " + PosterRetryPolicy.failureCategory(reason) +
-                            ", retry=" + tvRetryApplied)
-                    if (tvRetryRequested == tvRetryApplied &&
-                        PosterRetryPolicy.retryAllowed(tvRetryApplied, reason)
-                    ) tvRetryRequested++
+                            ", retry=" + requestAttempt)
+                    if (tvRetryRequested == requestAttempt &&
+                        PosterRetryPolicy.retryAllowed(requestAttempt, reason)
+                    ) tvRetryRequested = requestAttempt + 1
                 }
             })
+        }
     }
 }
 

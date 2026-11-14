@@ -25,3 +25,4 @@ password.txt
 
 # FFmpeg LGPL audio extension is always built from pinned source.
 android/app/libs/media3-ffmpeg-decoder-api24.aar
+android/ffmpeg-distribution/

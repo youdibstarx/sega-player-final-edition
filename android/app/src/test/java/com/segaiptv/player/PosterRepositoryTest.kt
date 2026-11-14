@@ -84,4 +84,16 @@ class PosterRepositoryTest {
         } }.awaitAll()
         assertTrue(peak.get() in 1..3)
     }
+
+    @Test fun failedCatalogueUrlIsNotPersistedWhenDetailsHaveNoArtwork() = runBlocking {
+        val c = RuntimeEnvironment.getApplication()
+        val e = movie(98232, "https://images.test/failed.jpg")
+        assertEquals(e.logo, PosterRepository.resolve(c, e, true) { """{"info":{}}""" })
+        val key = mediaKey(e.sourceUrl + "\n" + e.url + "\n" + e.logo)
+        assertFalse(c.getSharedPreferences("poster_metadata_v1", android.content.Context.MODE_PRIVATE).contains(key))
+        val missing = e.copy(logo = "")
+        assertEquals("https://images.test/restored.jpg", PosterRepository.resolve(c, missing) {
+            """{"info":{"cover":"https://images.test/restored.jpg"}}"""
+        })
+    }
 }

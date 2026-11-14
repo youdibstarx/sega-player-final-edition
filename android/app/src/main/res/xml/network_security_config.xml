@@ -8,6 +8,7 @@
     </base-config>
     <!-- Android 7.0 lacks ISRG Root X1. Scope this official CA to our panel. -->
     <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">tchach.online</domain>
         <domain includeSubdomains="false">sega.faster4k.xyz</domain>
         <trust-anchors>
             <certificates src="system" />

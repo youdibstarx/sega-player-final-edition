@@ -27,6 +27,11 @@ import javax.net.ssl.HttpsURLConnection
 private data class Release(val code: Int, val name: String, val hash: String)
 private fun ByteArray.hex() = joinToString("") { "%02x".format(it.toInt() and 255) }
 
+// Per-app unknown-source permission exists only from Android 8. Android 7
+// delegates its global unknown-source setting to the system installer.
+internal fun needsUpdateInstallPermission(sdk: Int, allowed: () -> Boolean): Boolean =
+    sdk >= 26 && !allowed()
+
 private fun <T> fetchReleaseFile(name: String, read: (InputStream) -> T): T {
     val url = URL(BackendAddress.value().trimEnd('/') + "/sega-updates/" + name)
     val connection = NetworkClient.open(url) as HttpsURLConnection
@@ -121,7 +126,7 @@ internal fun rememberUpdatePrompt(): () -> Unit {
         confirmButton = {
             val candidate = release
             if (candidate != null) TextButton(enabled = !busy, onClick = {
-                if (!context.packageManager.canRequestPackageInstalls()) {
+                if (needsUpdateInstallPermission(Build.VERSION.SDK_INT) { context.packageManager.canRequestPackageInstalls() }) {
                     message = R.string.update_permission
                     try { context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.packageName))) }
                     catch (_: Exception) { message = R.string.update_permission }
