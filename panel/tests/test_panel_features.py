@@ -23,7 +23,7 @@ class NewPanelFeaturesTests(unittest.TestCase):
         import main
         self.m = importlib.reload(main)
         self.c = TestClient(self.m.app)
-        self.d = {"device_id": str(uuid.uuid4()), "mac_alias": "12:23:34:45:56:67", "device_key": "AB123C"}
+        self.d = {"device_id": str(uuid.uuid4()), "mac_alias": "12:23:34:45:56:67", "device_key": "AB123C", "trial_token": uuid.uuid4().hex * 2}
         self.h = {"X-Device-Mac": self.d["mac_alias"], "X-Device-Key": self.d["device_key"], "X-Portal-Request": "1"}
         self.admin = {"X-Panel-Request": "1", "Authorization": "Basic " + base64.b64encode(b"qa:test").decode()}
         self.assertEqual(self.c.post("/api/v1/register", json=self.d).status_code, 200)

@@ -33,7 +33,8 @@ class PanelApiTests(unittest.TestCase):
         identity = {
             "device_id": str(uuid.uuid4()),
             "mac_alias": "12:23:34:45:56:67",
-            "device_key": "sample-key-with-more-than-thirty-characters-00001"
+            "device_key": "sample-key-with-more-than-thirty-characters-00001",
+            "trial_token": uuid.uuid4().hex * 2
         }
         self.assertEqual(self.client.post("/api/v1/register", json=identity).status_code, 200)
         self.assertEqual(self.client.post("/api/v1/register", json=identity).status_code, 200)
@@ -78,5 +79,3 @@ class PanelApiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-

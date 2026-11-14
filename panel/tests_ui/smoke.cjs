@@ -29,7 +29,7 @@ async function main() {
     api = await request.newContext({ baseURL: base, extraHTTPHeaders: {
       Authorization: 'Basic ' + Buffer.from('qa:qa-local-only').toString('base64'), 'X-Panel-Request': '1' } });
     const identity = { device_id: '00000000-0000-4000-8000-000000000001',
-      mac_alias: '12:23:34:45:56:67', device_key: 'AB123C' };
+      mac_alias: '12:23:34:45:56:67', device_key: 'AB123C', trial_token: 'a'.repeat(64) };
     for (const [url, data] of [['/api/v1/register', identity],
       ['/admin/api/resellers', { username: 'uitest', password: 'test-ui-password-1' }],
       ['/admin/api/resellers/1/credits', { amount: 3 }]]) {
