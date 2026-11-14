@@ -231,7 +231,6 @@ initialize()
 
 
 def admin_only(request: Request, credentials: HTTPBasicCredentials = Depends(security)):
-    limiter.check("admin-login", request.client.host if request.client else "unknown", 30)
     admin = os.getenv("ADMIN_USERNAME", "")
     password = os.getenv("ADMIN_PASSWORD", "")
     # Explicit env var required; never ship a default password.
@@ -239,6 +238,9 @@ def admin_only(request: Request, credentials: HTTPBasicCredentials = Depends(sec
         hmac.compare_digest(credentials.username.encode(), admin.encode())
         and hmac.compare_digest(credentials.password.encode(), password.encode())
     ):
+        # Successful Basic-authenticated assets and API calls are not login
+        # failures. The independent admin-ip request limit still applies.
+        limiter.check("admin-login", request.client.host if request.client else "unknown", 30)
         raise HTTPException(status_code=401, detail="Invalid admin credentials", headers={"WWW-Authenticate": "Basic"})
     return True
 
@@ -625,6 +627,7 @@ def portal_account(device=Depends(portal_device)):
 @APP.put("/portal/api/playlist")
 def portal_save(payload: PersonalPlaylistInput, device=Depends(portal_device)):
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
         row = db.execute("SELECT id,pin_hash FROM personal_playlists WHERE device_id=? ORDER BY id LIMIT 1",
                          (device["id"],)).fetchone()
         if row:
@@ -641,6 +644,7 @@ def portal_save(payload: PersonalPlaylistInput, device=Depends(portal_device)):
 @APP.delete("/portal/api/playlist")
 def portal_delete(device=Depends(portal_device)):
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
         row = db.execute("SELECT id,pin_hash FROM personal_playlists WHERE device_id=? ORDER BY id LIMIT 1",
                          (device["id"],)).fetchone()
         if row:
@@ -654,6 +658,7 @@ def portal_delete(device=Depends(portal_device)):
 def portal_add(payload: PersonalPlaylistCreate, device=Depends(portal_device)):
     digest, salt = pin_fields(payload.pin)
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
         count = db.execute("SELECT COUNT(*) FROM personal_playlists WHERE device_id=?",
                            (device["id"],)).fetchone()[0]
         if count >= 25:
@@ -669,6 +674,7 @@ def portal_update(playlist_id: int, payload: PersonalPlaylistUpdate, device=Depe
     if payload.remove_pin and payload.pin:
         raise HTTPException(422, "Cannot set and remove PIN together")
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
         row = require_playlist(db, device["id"], playlist_id)
         check_existing_pin(row, payload.current_pin)
         digest, salt = (None, None) if payload.remove_pin else (
@@ -682,6 +688,7 @@ def portal_update(playlist_id: int, payload: PersonalPlaylistUpdate, device=Depe
 def portal_remove(playlist_id: int, payload: Optional[PinCheck] = None,
                   device=Depends(portal_device)):
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
         row = require_playlist(db, device["id"], playlist_id)
         check_existing_pin(row, payload.pin if payload else None)
         db.execute("DELETE FROM personal_playlists WHERE id=?", (playlist_id,))
@@ -737,6 +744,16 @@ def admin_remove_offer(offer_id: int, _: bool = Depends(admin_only)):
 @APP.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@APP.get("/api/v1/time")
+def server_time():
+    # Signed Android requests use this public clock to tolerate an incorrect
+    # TV-box wall clock. No device credentials or database writes are needed.
+    utc = datetime.now(timezone.utc).replace(microsecond=0)
+    unix = int(utc.timestamp())
+    return {"unix_seconds": unix, "unix": unix, "timestamp": unix,
+            "server_time": unix, "server_time_ms": unix * 1000, "utc": utc.isoformat()}
 
 install_reseller(APP, database, admin_only, limiter, BASE, add_months, now_iso)
 
