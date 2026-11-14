@@ -55,7 +55,15 @@ class PosterArtworkUiTest {
                     PosterArtwork(VodTitle(e.name, listOf(e)), Modifier.size(120.dp, 180.dp), refresh.intValue)
                 }
             }
-            compose.waitUntil(15000) { attempts.get() == 3 }
+            try {
+                compose.waitUntil(15000) {
+                    compose.mainClock.advanceTimeBy(100)
+                    attempts.get() >= 3
+                }
+            } catch (failure: Throwable) {
+                throw AssertionError("Expected three bounded image loads; actual=" + attempts.get() +
+                    ", total mock requests=" + server.requestCount, failure)
+            }
             // Drain time after the retry budget is exhausted. No fourth load
             // should be scheduled until the user explicitly refreshes.
             compose.mainClock.advanceTimeBy(10000)
@@ -63,6 +71,7 @@ class PosterArtworkUiTest {
             assertEquals(3, attempts.get())
             compose.runOnIdle { refresh.intValue++ }
             compose.waitUntil(15000) {
+                compose.mainClock.advanceTimeBy(100)
                 attempts.get() >= 4 && compose.onAllNodesWithContentDescription("TV retry test").fetchSemanticsNodes().isNotEmpty() &&
                     compose.onAllNodesWithText("No cover available").fetchSemanticsNodes().isEmpty()
             }
