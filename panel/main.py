@@ -745,6 +745,16 @@ def admin_remove_offer(offer_id: int, _: bool = Depends(admin_only)):
 def health():
     return {"status": "ok"}
 
+
+@APP.get("/api/v1/time")
+def server_time():
+    # Signed Android requests use this public clock to tolerate an incorrect
+    # TV-box wall clock. No device credentials or database writes are needed.
+    utc = datetime.now(timezone.utc).replace(microsecond=0)
+    unix = int(utc.timestamp())
+    return {"unix_seconds": unix, "unix": unix, "timestamp": unix,
+            "server_time": unix, "server_time_ms": unix * 1000, "utc": utc.isoformat()}
+
 install_reseller(APP, database, admin_only, limiter, BASE, add_months, now_iso)
 
 app = APP

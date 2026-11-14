@@ -134,4 +134,14 @@ class SecurityTests(unittest.TestCase):
         path=f"/admin/api/devices/{self.identity['device_id']}/proof"
         self.assertEqual(self.client.post(path,json={'fingerprint':'0'*64},headers=self.headers).status_code,404)
 
+    def test_public_clock_bootstrap_matches_signed_android_contract(self):
+        import time
+        response = self.client.get('/api/v1/time')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers['cache-control'], 'no-store')
+        clock = response.json()
+        self.assertLessEqual(abs(clock['unix_seconds'] - time.time()), 2)
+        self.assertEqual(clock['server_time_ms'], clock['unix_seconds'] * 1000)
+        self.assertNotIn('device', response.text)
+
 
