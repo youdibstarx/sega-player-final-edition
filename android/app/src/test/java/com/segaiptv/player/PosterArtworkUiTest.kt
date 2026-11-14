@@ -62,7 +62,8 @@ class PosterArtworkUiTest {
                 }
             } catch (failure: Throwable) {
                 throw AssertionError("Expected three bounded image loads; actual=" + attempts.get() +
-                    ", total mock requests=" + server.requestCount, failure)
+                    ", total mock requests=" + server.requestCount + ", events=" +
+                    org.robolectric.shadows.ShadowLog.getLogsForTag("SEGA_POSTER").joinToString { it.msg }, failure)
             }
             // Drain time after the retry budget is exhausted. No fourth load
             // should be scheduled until the user explicitly refreshes.
