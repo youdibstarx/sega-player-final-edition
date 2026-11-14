@@ -16,9 +16,13 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
       - uses: android-actions/setup-android@v4
-      - run: yes | sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - run: yes | sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+      - name: Install FFmpeg native build tools
+        run: sudo apt-get update -qq && sudo apt-get install -y nasm ninja-build
+      - name: Build Media3 FFmpeg audio extension for Android 7+ (API24)
+        run: bash android/scripts/prepare_ffmpeg_audio.sh
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
@@ -30,13 +34,15 @@ jobs:
           APK=android/app/build/outputs/apk/hardened/app-hardened-unsigned.apk
           test "$(apkanalyzer manifest debuggable "$APK")" = "false"
           test "$(apkanalyzer manifest application-id "$APK")" = "com.segaiptv.player.v3.secure"
-          test "$(apkanalyzer manifest version-code "$APK")" = "25"
+          test "$(apkanalyzer manifest version-code "$APK")" = "47"
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "$APK"
-          cp "$APK" dist/SEGA_PLAYER_V3_0.5.7_UNSIGNED.apk
+          unzip -Z1 "$APK" | grep -Fq 'lib/arm64-v8a/libffmpegJNI.so'
+          unzip -Z1 "$APK" | grep -Fq 'lib/armeabi-v7a/libffmpegJNI.so'
+          cp "$APK" dist/SEGA_PLAYER_V3_0.5.29_FFMPEG_UNSIGNED.apk
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" dist/apksigner.jar
       - uses: actions/upload-artifact@v4
         with:
-          name: SEGA-0.5.7-unsigned
+          name: SEGA-0.5.29-ffmpeg-unsigned
           path: dist/
       - uses: actions/upload-artifact@v4
         if: always()
@@ -54,4 +60,3 @@ jobs:
         working-directory: panel
       - run: python -m unittest discover -s tests -v
         working-directory: panel
-

@@ -1,6 +1,12 @@
 package com.segaiptv.player
 
 import android.view.View
+import android.view.KeyEvent
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -25,7 +31,7 @@ import androidx.media3.ui.PlayerView
 @Composable
 fun MediaSurface(channel: Channel?, modifier: Modifier = Modifier, controls: Boolean = false,
     onControlsVisible: (Boolean) -> Unit = {}, onPlayer: (ExoPlayer?) -> Unit = {},
-    onEnded: () -> Unit = {}) {
+    onEnded: () -> Unit = {}, onOk: () -> Unit = {}) {
     val store = ViewerStore.get(LocalContext.current)
     store.revision
     var unlock by remember(channel?.url) { mutableStateOf(false) }
@@ -46,17 +52,18 @@ fun MediaSurface(channel: Channel?, modifier: Modifier = Modifier, controls: Boo
                 }
             }
         }
-    } else UnlockedMediaSurface(channel, modifier, controls, position ?: 0L, onControlsVisible, onPlayer, onEnded)
+    } else UnlockedMediaSurface(channel, modifier, controls, position ?: 0L, onControlsVisible, onPlayer, onEnded, onOk)
 }
 
 /** Owns one player while STARTED and persists position before every release. */
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls: Boolean, initialPosition: Long,
-    onControlsVisible: (Boolean) -> Unit, onPlayer: (ExoPlayer?) -> Unit, onEnded: () -> Unit) {
+    onControlsVisible: (Boolean) -> Unit, onPlayer: (ExoPlayer?) -> Unit, onEnded: () -> Unit, onOk: () -> Unit) {
     val visibilityCallback by rememberUpdatedState(onControlsVisible)
     val playerCallback by rememberUpdatedState(onPlayer)
     val endedCallback by rememberUpdatedState(onEnded)
+    val okCallback by rememberUpdatedState(onOk)
     val context = LocalContext.current
     val store = remember { ViewerStore.get(context) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -95,7 +102,29 @@ private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls
             if (owned != null || channel == null || store.blocked(channel)) return
             error = ""; buffering = true
             val excludedDecoders = recovery.excluded.toSet()
+            // Preserve the original audio renderer on phones, where sound already
+            // works. Only TV and touchless box devices prefer the FFmpeg renderer.
+            val pm = context.packageManager
+            val tvMode = (context.getSystemService(android.content.Context.UI_MODE_SERVICE)
+                as? android.app.UiModeManager)?.currentModeType ==
+                android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+            val useFfmpegAudio = AudioDecoderPolicy.preferFfmpeg(
+                hasLeanback = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK),
+                tvUiMode = tvMode,
+                hasTelevisionFeature = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEVISION),
+                hasTouchscreen = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN)
+            )
+            android.util.Log.i("SEGA_AUDIO", "Audio mode: " +
+                (if (useFfmpegAudio) "TV/box (FFmpeg preferred)" else "mobile (platform preferred)"))
             val renderers = androidx.media3.exoplayer.DefaultRenderersFactory(context.applicationContext)
+                // Prefer FFmpeg only for boxes that may falsely advertise AC3/EAC3 support.
+                // Hardware MediaCodec video decoding remains unchanged on every device.
+                .setExtensionRendererMode(
+                    if (useFfmpegAudio)
+                        androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                    else
+                        androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
+                )
                 .setEnableDecoderFallback(true)
                 .setMediaCodecSelector { mime, secure, tunneling ->
                     androidx.media3.exoplayer.mediacodec.MediaCodecSelector.DEFAULT
@@ -110,11 +139,26 @@ private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls
                 .setPrioritizeTimeOverSizeThresholds(false)
                 .build()
             val created = ExoPlayer.Builder(context.applicationContext, renderers)
-                .setLoadControl(loadControl).build()
+                .setLoadControl(loadControl)
+                .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context)
+                    .setDataSourceFactory(androidx.media3.datasource.DefaultDataSource.Factory(context,
+                        androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(NetworkClient.client))))
+                .build()
             owned = created
             created.setAudioAttributes(AudioAttributes.DEFAULT, true)
             created.setHandleAudioBecomingNoisy(true)
             created.addListener(object : Player.Listener {
+                override fun onTracksChanged(tracks: Tracks) {
+                    // Log only audio format details, never a stream URL or credentials.
+                    val selected = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+                        .flatMap { group ->
+                            (0 until group.length).filter { group.isTrackSelected(it) }
+                                .map { group.getTrackFormat(it) }
+                        }.joinToString(" | ") {
+                            "${it.sampleMimeType ?: "unknown"} ${it.channelCount}ch ${it.sampleRate}Hz"
+                        }
+                    android.util.Log.i("SEGA_AUDIO", "Selected audio: ${selected.ifBlank { "none" }}")
+                }
                 override fun onPlaybackStateChanged(state: Int) {
                     buffering = state == Player.STATE_BUFFERING
                     if (state == Player.STATE_READY) {
@@ -174,7 +218,20 @@ private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls
         onDispose { lifecycle.removeObserver(observer); stop() }
     }
     Box(modifier.background(Color.Black), contentAlignment = Alignment.Center) {
-        AndroidView(factory = { ctx -> PlayerView(ctx).apply {
+        AndroidView(factory = { ctx -> object : PlayerView(ctx) {
+            // Media3 may consume DPAD_CENTER before an OnKeyListener receives it.
+            // Intercept live TV OK before the player handles its controller keys.
+            override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+                val ok = event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                    event.keyCode == KeyEvent.KEYCODE_ENTER ||
+                    event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+                if (controls && channel != null && !isVod(channel) && ok) {
+                    if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) okCallback()
+                    return true
+                }
+                return super.dispatchKeyEvent(event)
+            }
+        }.apply {
             useController = controls
             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             controllerShowTimeoutMs = 3000
@@ -219,6 +276,10 @@ fun PlaybackScreen(channel: Channel, accent: Color, onBack: () -> Unit,
     isFavorite: Boolean, onFavorite: () -> Unit, entries: List<Channel> = emptyList(),
     onNext: (Channel) -> Unit = {}) {
     var controlsVisible by remember(channel.url) { mutableStateOf(false) }
+    var channelMenu by remember(channel.url) { mutableStateOf(false) }
+    val isLive = !isVod(channel)
+    val menuFocus = remember { FocusRequester() }
+
     var active by remember(channel.url) { mutableStateOf<ExoPlayer?>(null) }
     var tracks by remember(channel.url) { mutableStateOf(false) }
     var ended by remember(channel.url) { mutableStateOf(false) }
@@ -233,7 +294,7 @@ fun PlaybackScreen(channel: Channel, accent: Color, onBack: () -> Unit,
         }
     }
     val next = remember(channel, episodes) { nextEpisode(channel, episodes) }
-    BackHandler(onBack = onBack)
+    BackHandler { if (channelMenu) channelMenu = false else onBack() }
     if (tracks && active != null) TrackPicker(active!!) { tracks = false }
     if (pin) PinDialog(onClose = { pin = false }, onSuccess = { pin = false; lockMenu = true })
     if (lockMenu && !store.unlocked) PinDialog(onClose = { lockMenu = false }, onSuccess = {})
@@ -244,7 +305,38 @@ fun PlaybackScreen(channel: Channel, accent: Color, onBack: () -> Unit,
         } }, confirmButton = { TextButton(onClick = { lockMenu = false }) { Text(tr(R.string.close)) } })
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         MediaSurface(channel, Modifier.fillMaxSize(), controls = true, onControlsVisible = { controlsVisible = it },
-            onPlayer = { active = it }, onEnded = { ended = true })
+            onPlayer = { active = it }, onEnded = { ended = true },
+            onOk = { if (isLive) channelMenu = true })
+        if (channelMenu && isLive) {
+            val liveEntries = remember(entries) { entries.filter { !isVod(it) }.distinctBy { it.url } }
+            val currentIndex = liveEntries.indexOfFirst { it.url == channel.url }
+            val listState = rememberLazyListState()
+            LaunchedEffect(channelMenu, currentIndex) {
+                if (liveEntries.isNotEmpty()) {
+                    listState.scrollToItem(currentIndex.coerceAtLeast(0))
+                    kotlinx.coroutines.yield()
+                    try { menuFocus.requestFocus() } catch (_: IllegalStateException) { }
+                }
+            }
+            Surface(modifier = Modifier.align(Alignment.CenterStart).fillMaxWidth(.43f).fillMaxHeight(),
+                color = Color.Black.copy(alpha = .92f)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(tr(R.string.channels), color = accent, style = MaterialTheme.typography.titleMedium)
+                    LazyColumn(Modifier.weight(1f), state = listState) {
+                        items(liveEntries.size) { index ->
+                            val entry = liveEntries[index]
+                            TvAction(entry.name, modifier = Modifier.fillMaxWidth()
+                                .then(if (index == (if (currentIndex >= 0) currentIndex else 0))
+                                    Modifier.focusRequester(menuFocus) else Modifier),
+                                selected = entry.url == channel.url) {
+                                channelMenu = false
+                                if (entry.url != channel.url) onNext(entry)
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if (controlsVisible) Row(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = .7f)).padding(8.dp),
             verticalAlignment = Alignment.CenterVertically) {
             TvAction(tr(R.string.back), onClick = onBack)
@@ -263,4 +355,5 @@ fun PlaybackScreen(channel: Channel, accent: Color, onBack: () -> Unit,
         }
     }
 }
+
 

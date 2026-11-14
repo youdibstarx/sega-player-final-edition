@@ -20,5 +20,45 @@ jobs:
       - name: API compatibility and security tests
         working-directory: panel
         run: python -m unittest discover -s tests -v
+      - name: Audit resolved Python runtime dependencies
+        run: |
+          python -m pip install pip-audit==2.10.1
+          python -m pip_audit -r panel/requirements.txt --format json --output "$RUNNER_TEMP/sega-python-audit.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SEGA-python-dependency-audit
+          path: ${{ runner.temp }}/sega-python-audit.json
+          if-no-files-found: warn
       - name: Verify container packaging
-        run: docker build -t sega-panel-security-test panel
+        run: |
+          docker build -t sega-panel-security-test panel
+          docker run -d --name sega-panel-qa -p 127.0.0.1:8767:8000 sega-panel-security-test
+          trap 'docker rm -f sega-panel-qa' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8767/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs sega-panel-qa
+          exit 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser QA tools
+        run: |
+          npm install --prefix "$RUNNER_TEMP/sega-ui-tests" playwright@1.62.1
+          "$RUNNER_TEMP/sega-ui-tests/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Test themes, MAC input, reseller activation and portal PIN in browser
+        env:
+          NODE_PATH: ${{ runner.temp }}/sega-ui-tests/node_modules
+        run: node panel/tests_ui/smoke.cjs
+
+      - name: Package complete panel code without data or secrets
+        run: |
+          mkdir -p dist
+          tar -czf dist/SEGA_PANEL_AUDIT_CANDIDATE.tar.gz -C panel main.py admin_auth.py reseller.py proof.py security.py requirements.txt requirements-dev.txt Dockerfile static README_SECURITY.md PORTAL_UPGRADE_AR.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SEGA-panel-audit-candidate
+          path: dist/SEGA_PANEL_AUDIT_CANDIDATE.tar.gz
+          if-no-files-found: error

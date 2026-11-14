@@ -1,0 +1,42 @@
+name: Isolated Android UI regressions
+on:
+  push:
+    branches: [fix/0.5.28-audit-poster-stability]
+    paths: ['android/**', '.github/workflows/android-ui-regression.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v4
+      - run: yes | sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Isolate JVM UI tests from the separately tested JNI build
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/build.gradle.kts')
+          dependency = '    implementation(files("libs/media3-ffmpeg-decoder-api24.aar"))'
+          source = p.read_text()
+          assert source.count(dependency) == 1
+          p.write_text(source.replace(dependency, '    // JNI excluded in this non-packaging JVM-only job.'))
+          PY
+      - name: Run the poster and focus UI regressions only (no APK assembly)
+        working-directory: android
+        run: gradle :app:testDebugUnitTest --tests '*PosterArtworkUiTest*' --tests '*LiveFocusRestoreTest*'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: isolated-UI-test-reports
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/test-results/

@@ -16,7 +16,7 @@ class PortalTests(unittest.TestCase):
         import main
         self.m=importlib.reload(main)
         self.c=TestClient(self.m.app)
-        self.d={'device_id':str(uuid.uuid4()),'mac_alias':'12:23:34:45:56:67','device_key':'AB123C'}
+        self.d={'device_id':str(uuid.uuid4()),'mac_alias':'12:23:34:45:56:67','device_key':'AB123C','trial_token':uuid.uuid4().hex * 2}
         self.h={'X-Device-Mac':self.d['mac_alias'],'X-Device-Key':self.d['device_key'],'X-Portal-Request':'1'}
         self.admin={'X-Panel-Request':'1','Authorization':'Basic '+base64.b64encode(b'qa:test').decode()}
     def tearDown(self):
@@ -25,6 +25,38 @@ class PortalTests(unittest.TestCase):
         return self.c.post('/api/v1/register',json=self.d)
     def config(self):
         return self.c.get('/api/v1/config',params={'device_id':self.d['device_id']},headers={'X-Device-Key':self.d['device_key']})
+    def test_reinstallation_cannot_repeat_trial(self):
+        self.assertFalse(self.register().json()['activation_required'])
+        other={**self.d,'device_id':str(uuid.uuid4()),'mac_alias':'AA:BB:CC:DD:EE:FF'}
+        r=self.c.post('/api/v1/register',json=other)
+        self.assertEqual(r.status_code,200)
+        self.assertTrue(r.json()['activation_required'])
+
+    def test_old_client_pending_then_upgrade_and_existing_access_preserved(self):
+        token=self.d.pop('trial_token')
+        self.assertTrue(self.register().json()['activation_required'])
+        self.d['trial_token']=token
+        self.assertFalse(self.register().json()['activation_required'])
+        self.d.pop('trial_token')
+        self.assertFalse(self.register().json()['activation_required'])
+
+    def test_existing_trial_binds_token_without_extending(self):
+        self.register()
+        expiry=self.config().json()['expires_at']
+        with self.m.database() as db: db.execute('DELETE FROM trial_claims')
+        self.register()
+        self.assertEqual(self.config().json()['expires_at'],expiry)
+        other={**self.d,'device_id':str(uuid.uuid4()),'mac_alias':'AA:BB:CC:DD:EE:FF'}
+        self.assertTrue(self.c.post('/api/v1/register',json=other).json()['activation_required'])
+
+    def test_parallel_trial_claims_grant_only_one(self):
+        from concurrent.futures import ThreadPoolExecutor
+        identities=[{**self.d,'device_id':str(uuid.uuid4()),'mac_alias':f'AA:BB:CC:DD:EE:{i:02X}'} for i in range(4)]
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            results=list(pool.map(lambda d:self.c.post('/api/v1/register',json=d),identities))
+        self.assertTrue(all(r.status_code==200 for r in results))
+        self.assertEqual(sum(not r.json()['activation_required'] for r in results),1)
+
     def test_trial_once_expiry_and_admin_plans(self):
         self.assertEqual(self.register().status_code,200)
         first=self.config().json();self.assertTrue(first['active'])

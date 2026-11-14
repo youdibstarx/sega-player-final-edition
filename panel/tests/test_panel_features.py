@@ -4,6 +4,8 @@ import os
 import tempfile
 import unittest
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 
@@ -21,7 +23,7 @@ class NewPanelFeaturesTests(unittest.TestCase):
         import main
         self.m = importlib.reload(main)
         self.c = TestClient(self.m.app)
-        self.d = {"device_id": str(uuid.uuid4()), "mac_alias": "12:23:34:45:56:67", "device_key": "AB123C"}
+        self.d = {"device_id": str(uuid.uuid4()), "mac_alias": "12:23:34:45:56:67", "device_key": "AB123C", "trial_token": uuid.uuid4().hex * 2}
         self.h = {"X-Device-Mac": self.d["mac_alias"], "X-Device-Key": self.d["device_key"], "X-Portal-Request": "1"}
         self.admin = {"X-Panel-Request": "1", "Authorization": "Basic " + base64.b64encode(b"qa:test").decode()}
         self.assertEqual(self.c.post("/api/v1/register", json=self.d).status_code, 200)
@@ -55,6 +57,21 @@ class NewPanelFeaturesTests(unittest.TestCase):
         payload["published"] = True
         self.assertEqual(self.c.put(f"/admin/api/offers/{offer_id}", headers=self.admin, json=payload).status_code, 200)
         self.assertEqual(len(self.c.get("/api/public/offers").json()["offers"]), 1)
+
+    def test_concurrent_creates_respect_playlist_limit(self):
+        with self.m.database() as db:
+            db.executemany("INSERT INTO personal_playlists(device_id,name,url) VALUES(?,?,?)",
+                [(self.d['device_id'], str(n), 'https://example.org/list.m3u') for n in range(24)])
+        barrier = Barrier(4)
+        def create(n):
+            barrier.wait()
+            return self.c.post('/portal/api/playlists', headers=self.h,
+                json={'name': str(n), 'url': 'https://example.org/new.m3u'}).status_code
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            statuses = list(pool.map(create, range(4)))
+        self.assertEqual(sorted(statuses), [200, 400, 400, 400])
+        with self.m.database() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM personal_playlists').fetchone()[0], 25)
 
 
 if __name__ == "__main__":

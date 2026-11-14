@@ -12,13 +12,13 @@ android {
 
     defaultConfig {
         applicationId = "com.segaiptv.player"
-        minSdk = 26
+        minSdk = 24
         targetSdk = 35
-        versionCode = 31
-        versionName = "0.5.13"
+        versionCode = 47
+        versionName = "0.5.29"
         // Android Emulator: 10.0.2.2; physical device: your PC LAN IP / domain.
         val backendUrl = providers.gradleProperty("SEGA_IPTV_BACKEND_URL")
-            .orElse("https://sega.faster4k.xyz").get()
+            .orElse("https://tchach.online").get()
         require(URI(backendUrl).scheme == "https") { "Panel URL must use HTTPS" }
         // Obfuscation only: no URL encryption key or shared authentication secret in the APK.
         val encoded = backendUrl.toByteArray(Charsets.UTF_8).mapIndexed { i, b ->
@@ -65,6 +65,7 @@ android {
         buildConfig = true
     }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -79,6 +80,11 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
+    implementation("androidx.media3:media3-datasource-okhttp:1.11.1")
+    implementation("com.wireguard.android:tunnel:1.0.20260102")
     val composeBom = platform("androidx.compose:compose-bom:2025.12.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
@@ -90,18 +96,19 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
     implementation("androidx.media3:media3-exoplayer-dash:1.11.1")
     implementation("androidx.media3:media3-ui:1.11.1")
+    // Source-built LGPL FFmpeg audio-only renderer targeting API 24
+    // (Android 7). The upstream prebuilt AAR requires API 26 and is NOT used.
+    // Run android/scripts/prepare_ffmpeg_audio.sh before assembling.
+    implementation(files("libs/media3-ffmpeg-decoder-api24.aar"))
+    implementation("androidx.media3:media3-decoder:1.11.1")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("com.google.zxing:core:3.5.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("org.robolectric:robolectric:4.16")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     testImplementation("org.json:json:20240303")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
-
-
-
-
-

@@ -88,7 +88,7 @@ internal object XmltvGuide {
 
     suspend fun download(url: String, channelId: String, now: Long): List<EpgProgramme> {
         val coroutine = currentCoroutineContext()
-        val connection = URL(url).openConnection() as HttpURLConnection
+        val connection = NetworkClient.open(URL(url))
         connection.connectTimeout = 12_000; connection.readTimeout = 20_000
         try {
             check(connection.responseCode in 200..299) { "EPG unavailable" }
@@ -114,3 +114,4 @@ internal object XmltvGuide {
         } finally { connection.disconnect() }
     }
 }
+

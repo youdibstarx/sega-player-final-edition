@@ -57,7 +57,7 @@ private fun orderId(value: String): String =
 internal fun orderedChannels(scope: String, filtered: List<Channel>, channels: List<Channel>, canEdit: Boolean): List<Channel> {
     val prefs = orderPrefs()
     val mode = prefs.getString("mode", Order.PROVIDER.name)
-    if (mode != Order.MANUAL.name) return remember(mode, filtered) {
+    if (mode != Order.MANUAL.name) return rememberCatalogueWork<List<Channel>>(emptyList(), mode, filtered) {
         when (mode) {
             Order.AZ.name -> filtered.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
             Order.ZA.name -> filtered.sortedWith(compareByDescending(String.CASE_INSENSITIVE_ORDER) { it.name })
@@ -66,9 +66,9 @@ internal fun orderedChannels(scope: String, filtered: List<Channel>, channels: L
     }
     val key = remember(scope) { "order_" + orderId(scope) }
     var saved by remember(key) { mutableStateOf(prefs.getString(key, "").orEmpty()) }
-    val ids = remember(channels) { channels.associate { it.url to orderId(it.sourceUrl + "\n" + it.url) } }
+    val ids = rememberCatalogueWork<Map<String, String>>(emptyMap(), channels) { channels.associate { it.url to orderId(it.sourceUrl + "\n" + it.url) } }
     val positions = remember(saved) { saved.lineSequence().withIndex().associate { it.value to it.index } }
-    val sorted = remember(filtered, positions, ids) { filtered.sortedBy { positions[ids[it.url]] ?: Int.MAX_VALUE } }
+    val sorted = rememberCatalogueWork<List<Channel>>(emptyList(), filtered, positions, ids) { filtered.sortedBy { positions[ids[it.url]] ?: Int.MAX_VALUE } }
     var editing by remember(key) { mutableStateOf(false) }
     if (canEdit && sorted.size > 1) TvAction(tr(R.string.order_edit)) { editing = true }
     if (editing) {
@@ -91,3 +91,4 @@ internal fun orderedChannels(scope: String, filtered: List<Channel>, channels: L
     }
     return sorted
 }
+

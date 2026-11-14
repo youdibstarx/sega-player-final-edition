@@ -7,6 +7,8 @@ import java.security.Signature
 import java.security.spec.ECGenParameterSpec
 import java.util.Base64
 
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [24])
 class DeviceProofTest {
     @Test fun canonicalWireFormatIsStable() {
         assertEquals("SEGA-PROOF-1\nid\nGET\n/api/v1/config?device_id=id\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n100\nnonce",

@@ -17,6 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from security import RateLimiter
 from proof import DeviceProofs
 from reseller import install as install_reseller
+from admin_auth import install as install_admin_auth
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field, field_validator
 
@@ -24,7 +25,7 @@ BASE = Path(__file__).resolve().parent
 DB_FILE = Path(os.getenv("DATABASE_PATH", str(BASE / "data" / "segaiptv.db")))
 DB_FILE.parent.mkdir(parents=True, exist_ok=True)
 APP = FastAPI(title="SEGA IPTV Player Control Panel", docs_url=None, redoc_url=None, openapi_url=None)
-security = HTTPBasic()
+security = HTTPBasic(auto_error=False)
 
 limiter = RateLimiter(os.getenv("SECURITY_DATABASE_PATH", str(DB_FILE.with_name("security-limits.db"))))
 
@@ -129,6 +130,7 @@ def initialize():
             created_at TEXT NOT NULL,
             last_seen TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS trial_claims (token TEXT PRIMARY KEY, device_id TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS playlists (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -230,17 +232,11 @@ def initialize():
 initialize()
 
 
-def admin_only(request: Request, credentials: HTTPBasicCredentials = Depends(security)):
-    limiter.check("admin-login", request.client.host if request.client else "unknown", 30)
-    admin = os.getenv("ADMIN_USERNAME", "")
-    password = os.getenv("ADMIN_PASSWORD", "")
-    # Explicit env var required; never ship a default password.
-    if not admin or not password or not (
-        hmac.compare_digest(credentials.username.encode(), admin.encode())
-        and hmac.compare_digest(credentials.password.encode(), password.encode())
-    ):
-        raise HTTPException(status_code=401, detail="Invalid admin credentials", headers={"WWW-Authenticate": "Basic"})
-    return True
+authorize_admin = install_admin_auth(APP, database, limiter, BASE)
+
+
+def admin_only(request: Request, credentials: Optional[HTTPBasicCredentials] = Depends(security)):
+    return authorize_admin(request, credentials)
 
 
 def key_digest(key: str) -> str:
@@ -255,6 +251,7 @@ class DeviceRegistration(BaseModel):
     device_id: str = Field(min_length=30, max_length=80, pattern=r"^[A-Za-z0-9-]+$")
     mac_alias: str = Field(pattern=r"^[0-9A-F]{2}(:[0-9A-F]{2}){5}$")
     device_key: str = Field(min_length=6, max_length=128)
+    trial_token: Optional[str] = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
     @field_validator("device_key")
     @classmethod
@@ -370,12 +367,24 @@ async def register(device: DeviceRegistration, request: Request):
     await check_proof(device.device_id, request)
     with database() as db:
         db.execute("BEGIN IMMEDIATE")
-        entitlement = db.execute("SELECT trial_used FROM subscriptions WHERE device_id=?", (device.device_id,)).fetchone()
+        entitlement = db.execute("SELECT trial_used,plan FROM subscriptions WHERE device_id=?", (device.device_id,)).fetchone()
+        if entitlement and entitlement["trial_used"] and entitlement["plan"] != "pending" and device.trial_token:
+            db.execute("INSERT OR IGNORE INTO trial_claims(token,device_id) VALUES(?,?)",
+                       (device.trial_token, device.device_id))
         if entitlement and not entitlement["trial_used"]:
-            today = datetime.now(timezone.utc).date()
-            expiry = add_months(today, 1) - timedelta(days=1)
-            db.execute("UPDATE devices SET active=1,expires_at=? WHERE id=?", (expiry.isoformat(), device.device_id))
-            db.execute("UPDATE subscriptions SET trial_used=1,trial_started_at=?,plan='trial' WHERE device_id=?", (now_iso(), device.device_id))
+            claimed = False
+            if device.trial_token:
+                claim = db.execute("INSERT OR IGNORE INTO trial_claims(token,device_id) VALUES(?,?)",
+                                   (device.trial_token, device.device_id))
+                claimed = claim.rowcount == 1
+            if not claimed:
+                db.execute("UPDATE subscriptions SET trial_used=?,plan='pending' WHERE device_id=?",
+                           (int(bool(device.trial_token)), device.device_id))
+            else:
+                today = datetime.now(timezone.utc).date()
+                expiry = add_months(today, 1) - timedelta(days=1)
+                db.execute("UPDATE devices SET active=1,expires_at=? WHERE id=?", (expiry.isoformat(), device.device_id))
+                db.execute("UPDATE subscriptions SET trial_used=1,trial_started_at=?,plan='trial' WHERE device_id=?", (now_iso(), device.device_id))
         row = db.execute("SELECT active,expires_at FROM devices WHERE id=?", (device.device_id,)).fetchone()
     return {"registered": True, "activation_required": not enabled_device(row)}
 
@@ -401,11 +410,6 @@ async def device_config(device_id: str, request: Request):
         "background_url": settings["background_url"], "logo_url": settings["logo_url"],
         "playlists": [dict(r) for r in playlist_rows] + (personal_for_config(device_id) if enabled else [])
     }
-
-
-@APP.get("/admin")
-def admin_page(_: bool = Depends(admin_only)):
-    return FileResponse(BASE / "static" / "admin.html")
 
 
 @APP.get("/admin/assets/{file_name}")
@@ -625,6 +629,7 @@ def portal_account(device=Depends(portal_device)):
 @APP.put("/portal/api/playlist")
 def portal_save(payload: PersonalPlaylistInput, device=Depends(portal_device)):
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
         row = db.execute("SELECT id,pin_hash FROM personal_playlists WHERE device_id=? ORDER BY id LIMIT 1",
                          (device["id"],)).fetchone()
         if row:
@@ -641,6 +646,7 @@ def portal_save(payload: PersonalPlaylistInput, device=Depends(portal_device)):
 @APP.delete("/portal/api/playlist")
 def portal_delete(device=Depends(portal_device)):
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
         row = db.execute("SELECT id,pin_hash FROM personal_playlists WHERE device_id=? ORDER BY id LIMIT 1",
                          (device["id"],)).fetchone()
         if row:
@@ -654,6 +660,7 @@ def portal_delete(device=Depends(portal_device)):
 def portal_add(payload: PersonalPlaylistCreate, device=Depends(portal_device)):
     digest, salt = pin_fields(payload.pin)
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
         count = db.execute("SELECT COUNT(*) FROM personal_playlists WHERE device_id=?",
                            (device["id"],)).fetchone()[0]
         if count >= 25:
@@ -669,6 +676,7 @@ def portal_update(playlist_id: int, payload: PersonalPlaylistUpdate, device=Depe
     if payload.remove_pin and payload.pin:
         raise HTTPException(422, "Cannot set and remove PIN together")
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
         row = require_playlist(db, device["id"], playlist_id)
         check_existing_pin(row, payload.current_pin)
         digest, salt = (None, None) if payload.remove_pin else (
@@ -682,6 +690,7 @@ def portal_update(playlist_id: int, payload: PersonalPlaylistUpdate, device=Depe
 def portal_remove(playlist_id: int, payload: Optional[PinCheck] = None,
                   device=Depends(portal_device)):
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
         row = require_playlist(db, device["id"], playlist_id)
         check_existing_pin(row, payload.pin if payload else None)
         db.execute("DELETE FROM personal_playlists WHERE id=?", (playlist_id,))
@@ -738,9 +747,16 @@ def admin_remove_offer(offer_id: int, _: bool = Depends(admin_only)):
 def health():
     return {"status": "ok"}
 
+
+@APP.get("/api/v1/time")
+def server_time():
+    # Signed Android requests use this public clock to tolerate an incorrect
+    # TV-box wall clock. No device credentials or database writes are needed.
+    utc = datetime.now(timezone.utc).replace(microsecond=0)
+    unix = int(utc.timestamp())
+    return {"unix_seconds": unix, "unix": unix, "timestamp": unix,
+            "server_time": unix, "server_time_ms": unix * 1000, "utc": utc.isoformat()}
+
 install_reseller(APP, database, admin_only, limiter, BASE, add_months, now_iso)
 
 app = APP
-
-
-

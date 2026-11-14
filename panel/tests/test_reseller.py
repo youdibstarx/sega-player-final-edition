@@ -4,6 +4,8 @@ import os
 import tempfile
 import unittest
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -118,6 +120,24 @@ class ResellerTests(unittest.TestCase):
         self.assertNotIn("set-cookie", denied.headers)
         self.r1 = self.login("dealer1", "strong-password-1")
         self.assertEqual(self.c.get("/admin/api/resellers", headers=self.r1).status_code, 401)
+
+    def test_simultaneous_activation_debits_exactly_once(self):
+        reseller_id = self.create('dealer1', 'strong-password-1')
+        self.c.post(f'/admin/api/resellers/{reseller_id}/credits', headers=self.admin,
+                    json={'amount': 4}).raise_for_status()
+        session = self.login('dealer1', 'strong-password-1')
+        barrier = Barrier(4)
+        def activate(_):
+            barrier.wait()
+            return self.c.post('/reseller/api/activate', headers=session,
+                json={'mac': '12:23:34:45:56:67'}).status_code
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            statuses = list(pool.map(activate, range(4)))
+        self.assertEqual(sorted(statuses), [200, 409, 409, 409])
+        with self.m.database() as db:
+            self.assertEqual(db.execute('SELECT credits FROM resellers WHERE id=?',
+                                       (reseller_id,)).fetchone()[0], 3)
+            self.assertEqual(db.execute('SELECT count(*) FROM reseller_ledger WHERE delta=-1').fetchone()[0], 1)
 
     def test_login_page_logout_and_mac_fields(self):
         self.create("dealer1", "strong-password-1")

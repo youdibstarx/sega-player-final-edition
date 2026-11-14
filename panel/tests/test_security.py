@@ -18,7 +18,7 @@ class SecurityTests(unittest.TestCase):
         import main
         self.main = importlib.reload(main)
         self.client = TestClient(self.main.app)
-        self.identity = {'device_id':str(uuid.uuid4()), 'mac_alias':'12:23:34:45:56:67', 'device_key':'AB123C'}
+        self.identity = {'device_id':str(uuid.uuid4()), 'mac_alias':'12:23:34:45:56:67', 'device_key':'AB123C', 'trial_token':uuid.uuid4().hex * 2}
         self.auth = {'Authorization':'Basic '+base64.b64encode(b'qa:test-only').decode()}
         self.headers = {**self.auth, 'X-Panel-Request':'1'}
     def tearDown(self):
@@ -63,6 +63,14 @@ class SecurityTests(unittest.TestCase):
         bad={'Authorization':'Basic '+base64.b64encode(b'qa:wrong').decode()}
         for _ in range(30): self.assertEqual(self.client.get('/admin/api/state',headers=bad).status_code,401)
         self.assertEqual(self.client.get('/admin/api/state',headers=bad).status_code,429)
+    def test_successful_admin_requests_do_not_consume_failed_login_budget(self):
+        for _ in range(35):
+            self.assertEqual(self.client.get('/admin/api/state', headers=self.auth).status_code, 200)
+        bad = {'Authorization': 'Basic ' + base64.b64encode(b'qa:wrong').decode()}
+        for _ in range(30):
+            self.assertEqual(self.client.get('/admin/api/state', headers=bad).status_code, 401)
+        self.assertEqual(self.client.get('/admin/api/state', headers=bad).status_code, 429)
+        self.assertEqual(self.client.get('/admin/api/state', headers=self.auth).status_code, 200)
     def test_csrf(self):
         payload={'name':'Demo','url':'https://example.org/list.m3u'}
         for headers in (self.auth,{**self.headers,'Origin':'https://evil.example'}):
@@ -126,4 +134,12 @@ class SecurityTests(unittest.TestCase):
         path=f"/admin/api/devices/{self.identity['device_id']}/proof"
         self.assertEqual(self.client.post(path,json={'fingerprint':'0'*64},headers=self.headers).status_code,404)
 
-
+    def test_public_clock_bootstrap_matches_signed_android_contract(self):
+        import time
+        response = self.client.get('/api/v1/time')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers['cache-control'], 'no-store')
+        clock = response.json()
+        self.assertLessEqual(abs(clock['unix_seconds'] - time.time()), 2)
+        self.assertEqual(clock['server_time_ms'], clock['unix_seconds'] * 1000)
+        self.assertNotIn('device', response.text)
