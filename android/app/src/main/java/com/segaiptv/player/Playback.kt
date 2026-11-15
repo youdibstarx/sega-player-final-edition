@@ -249,24 +249,42 @@ private fun UnlockedMediaSurface(channel: Channel?, modifier: Modifier, controls
             modifier = Modifier.fillMaxSize())
         if (channel == null) Text(tr(R.string.select_channel), color = Color.White)
         if (buffering && channel != null) CircularProgressIndicator(color = v3Gold)
-        if (error.isNotBlank()) Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(tr(R.string.playback_unavailable, error), color = Color.White)
-            if (decoderRetry) Text(tr(R.string.trying_decoder), color = v3Gold)
-            else if (DecoderRecovery.network(error) && attempts < 3) Text(fx("reconnecting"), color = v3Gold)
-            else if (DecoderRecovery.decoding(error)) Text(tr(R.string.decoder_unavailable), color = v3Gold)
-            if (channel != null && controls && DecoderRecovery.decoding(error)) {
-                val externalTitle = tr(R.string.external_player)
-                TvAction(externalTitle) {
-                    try {
-                        player?.pause()
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
-                            .setDataAndType(android.net.Uri.parse(channel.url), "video/*")
-                        context.startActivity(android.content.Intent.createChooser(intent, externalTitle))
-                    } catch (_: android.content.ActivityNotFoundException) { externalUnavailable = true }
+        if (error.isNotBlank()) {
+            val httpStatusError = error.contains("HTTP", ignoreCase = true) ||
+                error.contains("BAD_HTTP_STATUS", ignoreCase = true)
+            if (httpStatusError) {
+                Box(Modifier.fillMaxSize()) {
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(R.drawable.satellite_http_error),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                    Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                        .background(Color.Black.copy(alpha = .40f)).padding(14.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        TvAction(tr(R.string.retry), onClick = { attempts = 0; retry++ })
+                    }
                 }
-                if (externalUnavailable) Text(tr(R.string.no_external_player), color = Color.White)
+            } else Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(tr(R.string.playback_unavailable, error), color = Color.White)
+                if (decoderRetry) Text(tr(R.string.trying_decoder), color = v3Gold)
+                else if (DecoderRecovery.network(error) && attempts < 3) Text(fx("reconnecting"), color = v3Gold)
+                else if (DecoderRecovery.decoding(error)) Text(tr(R.string.decoder_unavailable), color = v3Gold)
+                if (channel != null && controls && DecoderRecovery.decoding(error)) {
+                    val externalTitle = tr(R.string.external_player)
+                    TvAction(externalTitle) {
+                        try {
+                            player?.pause()
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                                .setDataAndType(android.net.Uri.parse(channel.url), "video/*")
+                            context.startActivity(android.content.Intent.createChooser(intent, externalTitle))
+                        } catch (_: android.content.ActivityNotFoundException) { externalUnavailable = true }
+                    }
+                    if (externalUnavailable) Text(tr(R.string.no_external_player), color = Color.White)
+                }
+                TvAction(tr(R.string.retry), onClick = { attempts = 0; retry++ })
             }
-            TvAction(tr(R.string.retry), onClick = { attempts = 0; retry++ })
         }
     }
 }
@@ -319,7 +337,7 @@ fun PlaybackScreen(channel: Channel, accent: Color, onBack: () -> Unit,
                 }
             }
             Surface(modifier = Modifier.align(Alignment.CenterStart).fillMaxWidth(.43f).fillMaxHeight(),
-                color = Color.Black.copy(alpha = .92f)) {
+                color = Color.Transparent) {
                 Column(Modifier.padding(12.dp)) {
                     Text(tr(R.string.channels), color = accent, style = MaterialTheme.typography.titleMedium)
                     LazyColumn(Modifier.weight(1f), state = listState) {
@@ -328,7 +346,7 @@ fun PlaybackScreen(channel: Channel, accent: Color, onBack: () -> Unit,
                             TvAction(entry.name, modifier = Modifier.fillMaxWidth()
                                 .then(if (index == (if (currentIndex >= 0) currentIndex else 0))
                                     Modifier.focusRequester(menuFocus) else Modifier),
-                                selected = entry.url == channel.url) {
+                                selected = entry.url == channel.url, transparentBackground = true) {
                                 channelMenu = false
                                 if (entry.url != channel.url) onNext(entry)
                             }

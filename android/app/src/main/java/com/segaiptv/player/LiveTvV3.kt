@@ -32,12 +32,14 @@ internal val v3Panel: Color
 /** Clickable provides D-pad/Enter handling. Focus is separate from the selected stream. */
 @Composable
 fun TvAction(label: String, modifier: Modifier = Modifier, selected: Boolean = false,
-    fontSize: TextUnit = 12.sp, verticalPadding: androidx.compose.ui.unit.Dp = 7.dp, onClick: () -> Unit) {
+    fontSize: TextUnit = 12.sp, verticalPadding: androidx.compose.ui.unit.Dp = 7.dp,
+    transparentBackground: Boolean = false, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Text(label, color = if (selected || focused) v3Gold else Color.White, maxLines = 1,
         overflow = TextOverflow.Ellipsis, fontSize = fontSize,
         modifier = modifier.onFocusChanged { focused = it.isFocused }
-            .background(if (selected || focused) appTheme.selected else v3Panel)
+            .background(if (transparentBackground) Color.Transparent
+                else if (selected || focused) appTheme.selected else v3Panel)
             .border(if (focused) 2.dp else 0.dp, if (focused) v3Gold else Color.Transparent)
             .clickable(onClick = onClick).padding(horizontal = 9.dp, vertical = verticalPadding))
 }
