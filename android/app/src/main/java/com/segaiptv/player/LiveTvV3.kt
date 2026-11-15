@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
 import coil.compose.AsyncImage
 
 internal val v3Gold: Color
@@ -30,14 +31,15 @@ internal val v3Panel: Color
 
 /** Clickable provides D-pad/Enter handling. Focus is separate from the selected stream. */
 @Composable
-fun TvAction(label: String, modifier: Modifier = Modifier, selected: Boolean = false, onClick: () -> Unit) {
+fun TvAction(label: String, modifier: Modifier = Modifier, selected: Boolean = false,
+    fontSize: TextUnit = 12.sp, verticalPadding: androidx.compose.ui.unit.Dp = 7.dp, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Text(label, color = if (selected || focused) v3Gold else Color.White, maxLines = 1,
-        overflow = TextOverflow.Ellipsis, fontSize = 12.sp,
+        overflow = TextOverflow.Ellipsis, fontSize = fontSize,
         modifier = modifier.onFocusChanged { focused = it.isFocused }
             .background(if (selected || focused) appTheme.selected else v3Panel)
             .border(if (focused) 2.dp else 0.dp, if (focused) v3Gold else Color.Transparent)
-            .clickable(onClick = onClick).padding(horizontal = 9.dp, vertical = 7.dp))
+            .clickable(onClick = onClick).padding(horizontal = 9.dp, vertical = verticalPadding))
 }
 
 @Composable
@@ -85,11 +87,13 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             if (showCategories) LazyColumn(Modifier.weight(.95f).fillMaxHeight().background(v3Panel),
                 verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                item { TvAction(tr(R.string.favorites_count, live.count { it.url in favorites }), Modifier.fillMaxWidth(), onlyFavorites) {
+                item { TvAction(tr(R.string.favorites_count, live.count { it.url in favorites }), Modifier.fillMaxWidth(), onlyFavorites,
+                    fontSize = 15.sp, verticalPadding = 10.dp) {
                     onlyFavorites = true
                 } }
                 itemsIndexed(groups.keys.toList()) { _, name ->
-                    TvAction("$name  (${groups[name]?.size ?: 0})", Modifier.fillMaxWidth(), !onlyFavorites && category == name) {
+                    TvAction("$name  (${groups[name]?.size ?: 0})", Modifier.fillMaxWidth(), !onlyFavorites && category == name,
+                        fontSize = 15.sp, verticalPadding = 10.dp) {
                         category = name; onlyFavorites = false
                     }
                 }
@@ -97,7 +101,8 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
             LazyColumn(Modifier.weight(1.12f).fillMaxHeight().background(v3Panel), state = channelListState,
                 verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (!showCategories) item {
-                    TvAction(tr(R.string.favorites_count, live.count { it.url in favorites }), Modifier.fillMaxWidth(), onlyFavorites) {
+                    TvAction(tr(R.string.favorites_count, live.count { it.url in favorites }), Modifier.fillMaxWidth(), onlyFavorites,
+                        fontSize = 15.sp, verticalPadding = 10.dp) {
                         onlyFavorites = !onlyFavorites
                     }
                 }
@@ -106,17 +111,17 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
                 itemsIndexed(visible, key = { i, ch -> "$i-${ch.url}" }) { index, ch ->
                     var focused by remember { mutableStateOf(false) }
                     val active = ch.url == selectedUrl
-                    Row(Modifier.fillMaxWidth().height(34.dp)
+                    Row(Modifier.fillMaxWidth().height(44.dp)
                         .then(if (active) Modifier.focusRequester(selectedFocus) else Modifier)
                         .onFocusChanged { focused = it.isFocused }
                         .background(if (active || focused) appTheme.selected else appTheme.row)
                         .border(if (focused) 2.dp else 0.dp, if (focused) v3Gold else Color.Transparent)
                         .clickable { if (selectedUrl == ch.url) onPlay(ch) else selectedUrl = ch.url }.padding(horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically) {
-                        Text("${index + 1}", color = Color.LightGray, fontSize = 10.sp, modifier = Modifier.width(22.dp))
-                        if (ch.logo.isNotBlank()) AsyncImage(ch.logo, null, Modifier.size(20.dp), contentScale = ContentScale.Fit)
-                        else Text("▶", color = v3Gold, modifier = Modifier.width(20.dp))
-                        Text(ch.name, color = if (active) v3Gold else Color.White, fontSize = 11.sp,
+                        Text("${index + 1}", color = Color.LightGray, fontSize = 12.sp, modifier = Modifier.width(26.dp))
+                        if (ch.logo.isNotBlank()) AsyncImage(ch.logo, null, Modifier.size(24.dp), contentScale = ContentScale.Fit)
+                        else Text("▶", color = v3Gold, modifier = Modifier.width(24.dp))
+                        Text(ch.name, color = if (active) v3Gold else Color.White, fontSize = 14.sp,
                             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp))
                     }
                 }
@@ -141,5 +146,6 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
         }
     }
 }
+
 
 

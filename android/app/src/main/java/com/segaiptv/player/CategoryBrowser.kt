@@ -52,6 +52,11 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
         localCatalogueGroups(channels, kind, m3uOnly)
     }
     val selected = categories.firstOrNull { it.key == selectedKey }
+    fun rememberCount(category: ProviderCategory, rows: List<Channel>) {
+        snapshot.entryCounts[category.key] = rows.size
+        categories = categories.map { if (it.key == category.key) it.copy(channelCount = rows.size) else it }
+        snapshot.categories = categories
+    }
     val localName = selectedKey?.takeIf { it.startsWith("local:") }?.removePrefix("local:")
     LaunchedEffect(providers, kind, refreshToken, retryCategories) {
         if (retryCategories == 0 && snapshot.categories != null) return@LaunchedEffect
@@ -78,6 +83,7 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
     LaunchedEffect(selected, refreshToken, retryEntries) {
         if (selected != null && retryEntries == 0 && snapshot.selectedKey == selectedKey && snapshot.entries != null) {
             entries = snapshot.entries.orEmpty()
+            rememberCount(selected, entries)
             loadedCallback(entries)
             return@LaunchedEffect
         }
@@ -87,6 +93,7 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
             try {
                 entries = entryLoader(selected)
                 snapshot.selectedKey = selectedKey; snapshot.entries = entries
+                rememberCount(selected, entries)
                 loadedCallback(entries)
             } catch (ex: Exception) { if (ex is CancellationException) throw ex; entriesError = true }
             finally { entriesLoading = false }
@@ -110,8 +117,11 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
             }
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 items(categories.filter { selectedKey != null || query.isBlank() || it.name.contains(query, true) }, key = { it.key }) { category ->
-                    TvAction((if (providers.size > 1) "${category.playlist.name} · " else "") + category.name,
-                        Modifier.fillMaxWidth(), selected = selectedKey == category.key) {
+                    val count = snapshot.entryCounts[category.key] ?: category.channelCount
+                    TvAction((if (providers.size > 1) "${category.playlist.name} · " else "") + category.name +
+                        " (${count?.toString() ?: "—"})",
+                        Modifier.fillMaxWidth(), selected = selectedKey == category.key,
+                        fontSize = 15.sp, verticalPadding = 10.dp) {
                         selectedKey = category.key; onChoose()
                     }
                 }
@@ -150,6 +160,7 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
         }
     }
 }
+
 
 
 

@@ -28,7 +28,10 @@ internal object CategoryDiskCache {
         try {
             val rows = fetch()
             val json = JSONArray()
-            rows.forEach { json.put(JSONObject().put("category_id", it.id).put("category_name", it.name)) }
+            rows.forEach { category ->
+                json.put(JSONObject().put("category_id", category.id).put("category_name", category.name)
+                    .apply { category.channelCount?.let { put("streams_count", it) } })
+            }
             val atomic = AtomicFile(file(c, p, kind))
             var stream: java.io.FileOutputStream? = null
             try {
@@ -61,3 +64,4 @@ internal object CategoryDiskCache {
         }
     }
 }
+
