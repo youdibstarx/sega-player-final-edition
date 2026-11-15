@@ -80,7 +80,7 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
         loadingCategories = false
         if (selectedKey != null && localName == null && categories.none { it.key == selectedKey }) selectedKey = null
     }
-    LaunchedEffect(selected, refreshToken, retryEntries) {
+    LaunchedEffect(selected?.key, refreshToken, retryEntries) {
         if (selected != null && retryEntries == 0 && snapshot.selectedKey == selectedKey && snapshot.entries != null) {
             entries = snapshot.entries.orEmpty()
             rememberCount(selected, entries)
