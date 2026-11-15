@@ -5,7 +5,8 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-internal data class ProviderCategory(val playlist: Playlist, val kind: String, val id: String, val name: String, val sourceOrderKnown: Boolean = true) {
+internal data class ProviderCategory(val playlist: Playlist, val kind: String, val id: String, val name: String,
+    val sourceOrderKnown: Boolean = true, val channelCount: Int? = null) {
     val key: String get() = "${playlist.id}:$kind:$id"
 }
 
@@ -20,7 +21,18 @@ internal object CategoryCatalogue {
             val id = row.optString("category_id")
             val name = row.optString("category_name").takeUnless { it == "null" }.orEmpty()
             if (!id.matches(Regex("[0-9]+")) || name.isBlank()) null
-            else ProviderCategory(playlist, kind, id, name)
+            else {
+                val count = listOf("streams_count", "stream_count", "channel_count", "total_streams", "total_count", "count")
+                    .firstNotNullOfOrNull { key ->
+                        val value = row.opt(key)
+                        when (value) {
+                            is Number -> value.toInt().takeIf { it >= 0 }
+                            is String -> value.toIntOrNull()?.takeIf { it >= 0 }
+                            else -> null
+                        }
+                    }
+                ProviderCategory(playlist, kind, id, name, channelCount = count)
+            }
         }.distinctBy { it.key }
     }
 
@@ -39,3 +51,4 @@ internal object CategoryCatalogue {
         XtreamCatalogue.parseSection(source, category.playlist, category.kind, json, categories.toString())
     }
 }
+

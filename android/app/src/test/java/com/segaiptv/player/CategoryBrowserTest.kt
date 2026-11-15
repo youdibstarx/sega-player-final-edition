@@ -36,7 +36,7 @@ class CategoryBrowserTest {
                 }
             }
         }
-        compose.onNodeWithText("Drama").performClick()
+        compose.onNodeWithText("Drama (—)").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithText("Sample movie").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Sample movie").assertIsDisplayed()
         compose.runOnIdle { fullscreen.value = true }
@@ -91,16 +91,17 @@ class CategoryBrowserTest {
                     })
             }
         }
-        compose.onNodeWithText("Drama").assertIsDisplayed()
+        compose.onNodeWithText("Drama (—)").assertIsDisplayed()
         compose.runOnIdle { assertTrue(calls.isEmpty()) }
-        compose.onNodeWithText("Drama").performClick()
+        compose.onNodeWithText("Drama (—)").performClick()
         compose.onNodeWithText("This category could not be loaded. Check the connection and retry.").assertIsDisplayed()
         compose.runOnIdle { assertEquals(listOf("7"), calls) }
         compose.onNodeWithText("Retry").performClick()
         compose.runOnIdle { assertEquals(listOf("7", "7"), calls) }
         compose.onNodeWithText("‹ Categories").performClick()
-        compose.onNodeWithText("Comedy").assertIsDisplayed()
+        compose.onNodeWithText("Comedy (—)").assertIsDisplayed()
         compose.runOnIdle { assertEquals(2, calls.size) }
     }
 }
+
 

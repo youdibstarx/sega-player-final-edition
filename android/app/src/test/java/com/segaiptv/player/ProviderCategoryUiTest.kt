@@ -44,11 +44,12 @@ class ProviderCategoryUiTest {
                         emptySet(), androidx.compose.ui.graphics.Color.Yellow, "", 0, {}, {}, {}, {})
                 }
             }
-            compose.waitUntil(5000) { compose.onAllNodesWithText("Provider films").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithText("Documentaries").assertExists()
-            compose.onNodeWithText("Provider films").performClick()
+            compose.waitUntil(5000) { compose.onAllNodesWithText("Provider films (—)").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Documentaries (—)").assertExists()
+            compose.onNodeWithText("Provider films (—)").performClick()
             compose.waitUntil(5000) { compose.onAllNodesWithText("Selected movie").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Selected movie").assertIsDisplayed()
+            compose.onNodeWithText("Provider films (1)").assertExists()
             val recorded = synchronized(requests) { requests.toList() }
             assertEquals(listOf("/player_api.php:get_vod_categories:null", "/player_api.php:get_vod_streams:7"),
                 recorded.filterNot { it.contains(":get_vod_info:") })
@@ -56,3 +57,4 @@ class ProviderCategoryUiTest {
         }
     }
 }
+

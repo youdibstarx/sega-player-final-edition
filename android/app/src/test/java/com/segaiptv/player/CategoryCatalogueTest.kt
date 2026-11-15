@@ -40,6 +40,14 @@ class CategoryCatalogueTest {
             """[{"category_id":"","category_name":"All"},{"category_id":"1&action=bad","category_name":"Bad"},{"category_id":7,"category_name":"Good"},{"category_id":7,"category_name":"Duplicate"}]""")
         assertEquals(listOf("7"), result.map { it.id })
     }
+    @Test fun categoryCountsAcceptCommonProviderFieldsAndIgnoreInvalidValues() {
+        val result = CategoryCatalogue.parseCategories(playlist, "live", """[
+            {"category_id":"1","category_name":"News","streams_count":"24"},
+            {"category_id":"2","category_name":"Sports","total_streams":18},
+            {"category_id":"3","category_name":"Other","count":-1}
+        ]""")
+        assertEquals(listOf(24, 18, null), result.map { it.channelCount })
+    }
     @Test fun providerFailureDoesNotFallBackToFullCatalogue() = runBlocking {
         var calls = 0
         try {
@@ -50,3 +58,4 @@ class CategoryCatalogueTest {
         } catch (_: java.io.IOException) { assertEquals(1, calls) }
     }
 }
+

@@ -9,6 +9,7 @@ class CategoryMemory {
         var categories: List<ProviderCategory>? = null
         var selectedKey: String? = null
         var entries: List<Channel>? = null
+        val entryCounts = mutableMapOf<String, Int>()
     }
     internal fun page(playlists: List<Playlist>, token: Int, kind: String): Snapshot {
         if (sources != playlists || generation != token) {
@@ -18,3 +19,4 @@ class CategoryMemory {
     }
     fun clear() { pages.clear(); sources = null; generation = -1 }
 }
+

@@ -63,22 +63,11 @@ internal object NetworkClient {
         )
         val loader = coil.ImageLoader.Builder(app)
         if (isTvBox) {
-            val imageDispatcher = okhttp3.Dispatcher().apply {
-                maxRequests = 6
-                maxRequestsPerHost = 3
-            }
-            val posterClient = client.newBuilder()
-                .dispatcher(imageDispatcher)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .callTimeout(40, TimeUnit.SECONDS)
-                .build()
-            loader.okHttpClient(posterClient)
+            // Keep the poster memory budget on TV boxes while using Coil's
+            // default image transport, as in the older working app versions.
             loader.memoryCache {
                 coil.memory.MemoryCache.Builder(app).maxSizePercent(0.10).build()
             }
-        } else {
-            // Keep the working phone image pipeline unchanged.
-            loader.okHttpClient(client)
         }
         coil.Coil.setImageLoader(loader.build())
     }
