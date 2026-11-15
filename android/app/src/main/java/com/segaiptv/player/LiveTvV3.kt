@@ -62,6 +62,14 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
     val channelListState = rememberLazyListState()
     val selectedFocus = remember { FocusRequester() }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val isTvDevice = remember(context) {
+        val pm = context.packageManager
+        val tvMode = (context.getSystemService(android.content.Context.UI_MODE_SERVICE)
+            as? android.app.UiModeManager)?.currentModeType ==
+            android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+        pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK) ||
+            pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEVISION) || tvMode
+    }
     val lastPlayedUrl = remember { ViewerStore.get(context).history(false).firstOrNull()?.channel?.url }
     var restoredSelection by remember { mutableStateOf(false) }
     LaunchedEffect(visible) {
@@ -114,7 +122,8 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
                     Row(Modifier.fillMaxWidth().height(44.dp)
                         .then(if (active) Modifier.focusRequester(selectedFocus) else Modifier)
                         .onFocusChanged { focused = it.isFocused }
-                        .background(if (active || focused) appTheme.selected else appTheme.row)
+                        .background(if (isTvDevice && (active || focused)) Color.Transparent
+                            else if (active || focused) appTheme.selected else appTheme.row)
                         .border(if (focused) 2.dp else 0.dp, if (focused) v3Gold else Color.Transparent)
                         .clickable { if (selectedUrl == ch.url) onPlay(ch) else selectedUrl = ch.url }.padding(horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically) {
