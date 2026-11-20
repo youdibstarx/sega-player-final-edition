@@ -103,7 +103,8 @@
     <string name="theme_classic">Carbone rouge</string>
     <string name="theme_ocean">Bleu océan</string>
     <string name="theme_emerald">Vert émeraude</string>
-    <string name="theme_hint">Le thème est appliqué immédiatement et mémorisé sur cet appareil.</string>
+    <string name="theme_ruby">Rubis</string>
+    <string name="theme_hint">L’administrateur peut choisir le thème de l’application depuis le panneau de contrôle.</string>
     <string name="preferences_group">Apparence et langue</string>
     <string name="channel_order">Ordre des chaînes</string>
     <string name="order_provider">Ordre du fournisseur</string>
@@ -123,6 +124,7 @@
     <string name="update_permission">Autorisez cette source puis revenez et choisissez Mettre à jour.</string>
 
     <string name="subscriptions_title">Mes abonnements</string>
+    <string name="playlist_selection_hint">Sélectionnez une seule liste à charger. Utilisez la télécommande pour naviguer et choisir.</string>
     <string name="connection_settings">Connexion</string>
     <string name="dns_hint">Le DNS concerne cette application. Relancez la lecture après modification. Un VPN actif utilise son propre DNS.</string>
     <string name="dns_automatic">Automatique · DNS de l’appareil</string>

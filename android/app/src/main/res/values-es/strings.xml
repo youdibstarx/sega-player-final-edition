@@ -103,7 +103,8 @@
     <string name="theme_classic">Carbono rojo</string>
     <string name="theme_ocean">Azul océano</string>
     <string name="theme_emerald">Verde esmeralda</string>
-    <string name="theme_hint">El tema se aplica al instante y se guarda en este dispositivo.</string>
+    <string name="theme_ruby">Rubí</string>
+    <string name="theme_hint">El administrador puede elegir el tema de la aplicación desde el panel de control.</string>
     <string name="preferences_group">Apariencia e idioma</string>
     <string name="channel_order">Orden de canales</string>
     <string name="order_provider">Orden del proveedor</string>
@@ -123,6 +124,7 @@
     <string name="update_permission">Permite esta fuente, vuelve y pulsa Actualizar.</string>
 
     <string name="subscriptions_title">Mis suscripciones</string>
+    <string name="playlist_selection_hint">Selecciona una sola lista para cargarla. Usa el mando para navegar y elegir.</string>
     <string name="connection_settings">Conexión</string>
     <string name="dns_hint">El DNS se aplica a esta app. Reinicia la reproducción tras cambiarlo. Un VPN activo usa su DNS.</string>
     <string name="dns_automatic">Automático · DNS del dispositivo</string>

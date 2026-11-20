@@ -294,7 +294,8 @@ internal fun PosterArtwork(title: VodTitle, modifier: Modifier, refreshPosters: 
 @Composable
 fun PlaylistScreen(config: AppConfig, identity: DeviceIdentity, loading: Boolean, warnings: String,
     onRefresh: () -> Unit, onLocalFile: () -> Unit, onCopyMac: () -> Unit,
-    onCopyKey: () -> Unit, modifier: Modifier = Modifier) {
+    onCopyKey: () -> Unit, selectedPlaylistId: Int, onSelectPlaylist: (Int) -> Unit,
+    modifier: Modifier = Modifier) {
     Row(modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1.65f).fillMaxHeight()) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -306,10 +307,18 @@ fun PlaylistScreen(config: AppConfig, identity: DeviceIdentity, loading: Boolean
                 maxLines = 2, modifier = Modifier.padding(top = 6.dp))
             Text(tr(R.string.subscriptions_title), color = Color.White, fontSize = 16.sp,
                 fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
+            Text(tr(R.string.playlist_selection_hint), color = Color.LightGray, fontSize = 11.sp,
+                modifier = Modifier.padding(bottom = 8.dp))
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(bottom = 8.dp)) {
                 items(config.playlists, key = { it.id }) { playlist ->
-                    SubscriptionCard(playlist, Modifier.fillMaxWidth())
+                    TvAction(
+                        label = (if (playlist.id == selectedPlaylistId) "✓  " else "○  ") + playlist.name,
+                        modifier = Modifier.fillMaxWidth(),
+                        selected = playlist.id == selectedPlaylistId,
+                        fontSize = 14.sp,
+                        verticalPadding = 14.dp
+                    ) { onSelectPlaylist(playlist.id) }
                 }
                 if (config.playlists.isEmpty()) item {
                     Row(Modifier.fillMaxWidth().background(v3Panel, RoundedCornerShape(14.dp)).padding(16.dp),

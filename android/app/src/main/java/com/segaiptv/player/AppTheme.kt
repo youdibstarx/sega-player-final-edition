@@ -23,7 +23,10 @@ internal enum class AppTheme(val id: String, val label: Int, val accent: Color,
         Color(0xFF19364D), Color(0xFF225A7D), Color(0xFF102B45), R.drawable.theme_ocean),
     EMERALD("emerald", R.string.theme_emerald, Color(0xFF84E0B8),
         Color(0xFF071610), Color(0xFF17382C), Color(0xFF112B22), Color(0xFF285441),
-        Color(0xFF1B3E30), Color(0xFF28684D), Color(0xFF133526), R.drawable.theme_emerald);
+        Color(0xFF1B3E30), Color(0xFF28684D), Color(0xFF133526), R.drawable.theme_emerald),
+    RUBY("ruby", R.string.theme_ruby, Color(0xFFFFB36B),
+        Color(0xFF1A0B0D), Color(0xFF3A171C), Color(0xFF2C1116), Color(0xFF66303A),
+        Color(0xFF452027), Color(0xFF8A343A), Color(0xFF3A161B), R.drawable.theme_carbon);
 
     companion object {
         fun fromId(id: String?): AppTheme = entries.firstOrNull { it.id == id } ?: CLASSIC
