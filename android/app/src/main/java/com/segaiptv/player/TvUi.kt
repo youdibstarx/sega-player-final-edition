@@ -67,7 +67,9 @@ fun TvShell(
     onRefresh: () -> Unit, onPlay: (Channel) -> Unit, onToggleFavorite: (Channel) -> Unit,
     onLocalFile: () -> Unit, onCopyMac: () -> Unit, onCopyKey: () -> Unit,
     refreshToken: Int = 0, onCategoryLoaded: (List<Channel>) -> Unit = {},
-    categoryMemory: CategoryMemory = remember { CategoryMemory() }
+    categoryMemory: CategoryMemory = remember { CategoryMemory() },
+    selectedPlaylists: List<Playlist> = config.playlists,
+    selectedPlaylistId: Int = 0, onSelectPlaylist: (Int) -> Unit = {}
 ) {
     val updates = rememberUpdatePrompt()
     if (page == "home") {
@@ -100,12 +102,12 @@ fun TvShell(
         }
         when (page) {
             "channels", "movies", "series" -> CategoryBrowser(
-                Modifier.weight(1f), config.playlists, page, channels, loading,
+                Modifier.weight(1f), selectedPlaylists, page, channels, loading,
                 favorites, accent, query, refreshToken, onPlay, onToggleFavorite, onCategoryLoaded, onChoose = { query = "" }, memory = categoryMemory, m3uOnly = false)
             "favorites" -> LiveTvV3(Modifier.weight(1f), channels.filter { it.url in favorites }, loading,
                 favorites, catalogueWarnings(warnings), onPlay, onToggleFavorite, includeVod = true, search = query)
             "playlists" -> PlaylistScreen(config, identity, loading, warnings, onRefresh, onLocalFile,
-                onCopyMac, onCopyKey, Modifier.weight(1f))
+                onCopyMac, onCopyKey, selectedPlaylistId, onSelectPlaylist, Modifier.weight(1f))
             else -> TvSettings(config, identity, channels.size, accent, error,
                 onCopyMac, onCopyKey, Modifier.weight(1f), channels, warnings, loading, updates, { onPageChange("channels") })
         }

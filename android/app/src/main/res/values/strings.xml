@@ -103,7 +103,8 @@
     <string name="theme_classic">Carbon Red</string>
     <string name="theme_ocean">Ocean Blue</string>
     <string name="theme_emerald">Emerald Green</string>
-    <string name="theme_hint">Choose a theme. Changes apply immediately and are saved on this device.</string>
+    <string name="theme_ruby">Ruby Ember</string>
+    <string name="theme_hint">The administrator can set the app theme from the control panel.</string>
     <string name="preferences_group">Appearance and language</string>
     <string name="channel_order">Channel order</string>
     <string name="order_provider">Provider order</string>
@@ -123,6 +124,7 @@
     <string name="update_permission">Allow installation from this app, then return and tap Update.</string>
 
     <string name="subscriptions_title">My subscriptions</string>
+    <string name="playlist_selection_hint">Select one list to load. The remote control can move through the list and choose it.</string>
     <string name="connection_settings">Connection</string>
     <string name="dns_hint">DNS applies to this app. Reopen playback after changing it. While a VPN is active, its DNS is used.</string>
     <string name="dns_automatic">Automatic · device DNS</string>

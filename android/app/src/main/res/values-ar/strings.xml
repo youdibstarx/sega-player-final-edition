@@ -103,7 +103,8 @@
     <string name="theme_classic">الأسود والأحمر</string>
     <string name="theme_ocean">الأزرق البحري</string>
     <string name="theme_emerald">الأخضر الزمردي</string>
-    <string name="theme_hint">اختر مظهر التطبيق. يطبق فوراً ويحفظ على هذا الجهاز.</string>
+    <string name="theme_ruby">الياقوتي</string>
+    <string name="theme_hint">يمكن للمشرف اختيار مظهر التطبيق من لوحة التحكم.</string>
     <string name="preferences_group">المظهر واللغة</string>
     <string name="channel_order">ترتيب القنوات</string>
     <string name="order_provider">ترتيب المزوّد</string>
@@ -123,6 +124,7 @@
     <string name="update_permission">اسمح بالتثبيت من هذا التطبيق ثم ارجع واضغط على تحديث.</string>
 
     <string name="subscriptions_title">اشتراكاتي</string>
+    <string name="playlist_selection_hint">اختر قائمة واحدة لتحميلها. استعمل أزرار الريموت للتنقل والاختيار.</string>
     <string name="connection_settings">إعدادات الاتصال</string>
     <string name="dns_hint">DNS خاص بهذا التطبيق. أعد فتح المشاهدة بعد التغيير. عند تشغيل VPN تُستخدم إعدادات DNS الخاصة به.</string>
     <string name="dns_automatic">تلقائي · DNS الجهاز</string>

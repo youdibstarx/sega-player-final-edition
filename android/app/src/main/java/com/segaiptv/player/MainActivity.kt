@@ -121,13 +121,18 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
     var activationToken by remember { mutableIntStateOf(0) }
     var catalogueToken by remember { mutableIntStateOf(-1) }
     var catalogueSources by remember { mutableStateOf<List<Playlist>?>(null) }
+    var selectedPlaylistId by remember { mutableIntStateOf(identity.selectedPlaylistId()) }
+    var playlistSelectionToken by remember { mutableIntStateOf(0) }
     var hasLoadedOnce by remember { mutableStateOf(false) }
     var page by remember { mutableStateOf("home") }
     var playing by remember { mutableStateOf<Channel?>(null) }
+    var resumeLiveOnOpen by remember { mutableStateOf(false) }
+    val themeSelection = LocalThemeSelection.current
     val categoryMemory = remember { CategoryMemory() }
     var favorites by remember { mutableStateOf(identity.readFavorites()) }
     val color = appTheme.accent
     val allChannels = rememberCatalogueWork<List<Channel>>(emptyList(), remoteChannels, localChannels, selectedChannels) { (remoteChannels + localChannels + selectedChannels).distinctBy { it.url } }
+    val currentPlaylist = choosePlaylist(config.playlists, selectedPlaylistId)
     val isTv = remember(context) {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
             (context.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager)
@@ -171,7 +176,7 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
         }
     }
 
-    LaunchedEffect(refreshToken, activationToken) {
+    LaunchedEffect(refreshToken, activationToken, playlistSelectionToken) {
         loading = !hasLoadedOnce
         channelsLoading = false
         message = ""
@@ -179,54 +184,47 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
             val freshConfig = loadConfig(identity)
             verifiedAt = android.os.SystemClock.elapsedRealtime()
             config = freshConfig
+            themeSelection.select(AppTheme.fromId(freshConfig.themeId))
             hasLoadedOnce = true
             loading = false
             if (!freshConfig.active) { playing = null; categoryMemory.clear() }
-            if (freshConfig.active && catalogueNeedsRefresh(catalogueToken, refreshToken, catalogueSources, freshConfig.playlists)) {
+            val lastPlayedSource = ViewerStore.get(context).history(false).firstOrNull()?.channel?.sourceUrl
+            val selectedPlaylist = choosePlaylist(freshConfig.playlists, selectedPlaylistId,
+                lastPlayedSource.takeIf { selectedPlaylistId == 0 })
+            val savedSelection = selectedPlaylist?.id ?: 0
+            if (savedSelection != selectedPlaylistId) {
+                selectedPlaylistId = savedSelection
+                identity.saveSelectedPlaylistId(savedSelection)
+            }
+            val activePlaylists = selectedPlaylist?.let { listOf(it) }.orEmpty()
+            if (freshConfig.active && catalogueNeedsRefresh(catalogueToken, refreshToken, catalogueSources, activePlaylists)) {
                 channelsLoading = true
                 playlistErrors = ""
-                selectedChannels = FavoriteCatalogue.read(context, favorites, freshConfig.playlists)
-                // Reuse loaded objects on manual refresh instead of deserializing a second library.
-                val existing = withContext(kotlinx.coroutines.Dispatchers.Default) { remoteChannels.groupBy { it.sourceUrl } }
-                val cached = mutableMapOf<Int, List<Channel>>()
-                for (playlist in freshConfig.playlists.filter { XtreamSource.from(it.url) == null }.take(30)) {
-                    cached[playlist.id] = existing[playlist.url] ?: LibraryCache.read(context, playlist)
-                }
-                remoteChannels = withContext(kotlinx.coroutines.Dispatchers.Default) { cached.values.flatten() }
+                selectedChannels = FavoriteCatalogue.read(context, favorites, activePlaylists)
                 LibraryCache.prune(context, freshConfig.playlists)
-                val loaded = mutableListOf<Channel>()
-                val failed = mutableListOf<String>()
+                val playlist = selectedPlaylist
+                val cached = if (playlist == null || XtreamSource.from(playlist.url) != null) emptyList() else
+                    remoteChannels.takeIf { rows -> rows.isNotEmpty() && rows.all { it.sourceUrl == playlist.url } }
+                        ?: LibraryCache.read(context, playlist)
+                remoteChannels = cached
                 val forceRefresh = refreshToken > 0 && refreshToken != catalogueToken
-                for (playlist in freshConfig.playlists.filter { XtreamSource.from(it.url) == null }.take(30)) {
-                    val saved = cached[playlist.id].orEmpty()
-                    val needsDownload = forceRefresh || saved.isEmpty()
-                    val result = refreshVisiblePlaylist(saved,
+                if (playlist != null && XtreamSource.from(playlist.url) == null) {
+                    val needsDownload = forceRefresh || cached.isEmpty()
+                    val result = refreshVisiblePlaylist(cached,
                         download = { publish -> Api.downloadPlaylistProgressive(playlist, publish) },
-                        onPartial = { partial ->
-                            val prefix = loaded.toList()
-                            val pending = cached.filterKeys { it != playlist.id }.values.toList()
-                            remoteChannels = withContext(kotlinx.coroutines.Dispatchers.Default) {
-                                prefix + partial + pending.flatten()
-                            }
-                        }, forceRefresh = forceRefresh)
-                    loaded += result.entries
+                        onPartial = { partial -> remoteChannels = partial }, forceRefresh = forceRefresh)
+                    remoteChannels = result.entries
                     // Never overwrite the last complete disk snapshot with a failed prefix.
                     if (needsDownload && result.warnings.isEmpty()) LibraryCache.write(context, playlist, result.entries)
-                    cached.remove(playlist.id)
-                    failed += result.warnings.map { "${playlist.name}: $it" }
-                    val prefix = loaded.toList()
-                    val pending = cached.values.toList()
-                    remoteChannels = withContext(kotlinx.coroutines.Dispatchers.Default) { prefix + pending.flatten() }
+                    if (result.warnings.isNotEmpty()) playlistErrors = result.warnings.joinToString("\n")
                 }
-                remoteChannels = loaded.toList()
                 val uriString = identity.localUri
                 if (!uriString.isNullOrBlank()) {
                     localChannels = runCatching { Api.readLocalPlaylist(context, android.net.Uri.parse(uriString)) }
                         .getOrElse { if (it is CancellationException) throw it; emptyList() }
                 }
-                if (failed.isNotEmpty()) playlistErrors = failed.joinToString("\n")
                 catalogueToken = refreshToken
-                catalogueSources = freshConfig.playlists
+                catalogueSources = activePlaylists
                 channelsLoading = false
             } else if (!freshConfig.active) {
                 remoteChannels = emptyList()
@@ -260,6 +258,16 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
         }
     }
 
+    LaunchedEffect(page, resumeLiveOnOpen, channelsLoading, allChannels, playing) {
+        if (page != "channels" || !resumeLiveOnOpen || channelsLoading || playing != null) return@LaunchedEffect
+        val last = ViewerStore.get(context).history(false).firstOrNull()?.channel
+        val activeSource = choosePlaylist(config.playlists, selectedPlaylistId)?.url
+        val available = last?.takeIf { it.sourceUrl == activeSource }
+            ?.let { saved -> allChannels.firstOrNull { it.url == saved.url } ?: saved }
+        if (available != null) playing = available
+        resumeLiveOnOpen = false
+    }
+
     val openLocal = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -278,7 +286,11 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
         favorites = if (channel.url in favorites) favorites - channel.url else favorites + channel.url
         identity.saveFavorites(favorites)
         val snapshots = (allChannels + channel).filter { it.url in favorites }
-        scope.launch { FavoriteCatalogue.write(context, snapshots) }
+        scope.launch {
+            val otherSources = FavoriteCatalogue.read(context, favorites,
+                config.playlists.filter { it.id != selectedPlaylistId })
+            FavoriteCatalogue.write(context, otherSources + snapshots)
+        }
     }
 
     MaterialTheme(
@@ -323,9 +335,34 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
                         refreshToken = refreshToken, categoryMemory = categoryMemory, onCategoryLoaded = {
                             selectedChannels = (it + selectedChannels.filter { ch -> ch.url in favorites }).distinctBy { ch -> ch.url }
                             val snapshots = allChannels.filter { ch -> ch.url in favorites } + it.filter { ch -> ch.url in favorites }
-                            scope.launch { FavoriteCatalogue.write(context, snapshots) }
+                            scope.launch {
+                                val otherSources = FavoriteCatalogue.read(context, favorites,
+                                    config.playlists.filter { playlist -> playlist.id != selectedPlaylistId })
+                                FavoriteCatalogue.write(context, otherSources + snapshots)
+                            }
                         },
-                        onPageChange = { page = it }, channels = allChannels,
+                        onPageChange = { target ->
+                            page = target
+                            resumeLiveOnOpen = target == "channels"
+                            if (target == "channels") {
+                                val lastSource = ViewerStore.get(context).history(false).firstOrNull()?.channel?.sourceUrl
+                                val lastPlaylist = playlistForSource(config.playlists, lastSource)
+                                if (lastPlaylist != null && lastPlaylist.id != selectedPlaylistId) {
+                                    selectedPlaylistId = lastPlaylist.id
+                                    identity.saveSelectedPlaylistId(lastPlaylist.id)
+                                    playlistSelectionToken++
+                                }
+                            }
+                        }, channels = allChannels,
+                        selectedPlaylists = currentPlaylist?.let { listOf(it) }.orEmpty(),
+                        selectedPlaylistId = selectedPlaylistId,
+                        onSelectPlaylist = { id ->
+                            if (id != selectedPlaylistId) {
+                                selectedPlaylistId = id
+                                identity.saveSelectedPlaylistId(id)
+                                playlistSelectionToken++
+                            }
+                        },
                         loading = channelsLoading, favorites = favorites, accent = color,
                         warnings = playlistErrors, error = message,
                         onRefresh = { refreshToken++ }, onPlay = { playing = it },

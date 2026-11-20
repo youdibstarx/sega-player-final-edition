@@ -33,6 +33,7 @@ data class AppConfig(
     val accent: String = "#E5474C",
     val background: String = "",
     val logo: String = "",
+    val themeId: String = "classic",
     val expires: String = "",
     val playlists: List<Playlist> = emptyList()
 )
@@ -59,6 +60,9 @@ class DeviceIdentity(internal val context: Context) {
     var localUri: String?
         get() = prefs.getString("local_uri", null)
         set(value) { prefs.edit().putString("local_uri", value).apply() }
+
+    fun selectedPlaylistId(): Int = prefs.getInt("selected_playlist_id", 0)
+    fun saveSelectedPlaylistId(id: Int) { prefs.edit().putInt("selected_playlist_id", id).apply() }
 
     fun readFavorites(): Set<String> = runCatching {
         val arr = JSONArray(prefs.getString("favorites", "[]"))
@@ -112,6 +116,7 @@ object Api {
             accent = response.optString("accent_color", "#E5474C"),
             background = response.optString("background_url", ""),
             logo = response.optString("logo_url", ""),
+            themeId = response.optString("app_theme", "classic"),
             expires = response.optString("expires_at", "").takeUnless { it == "null" } ?: "",
             playlists = lists
         )
@@ -185,6 +190,15 @@ object Api {
 
 
 }
+
+internal fun choosePlaylist(playlists: List<Playlist>, preferredId: Int,
+    preferredSourceUrl: String? = null): Playlist? =
+    playlists.firstOrNull { it.id == preferredId }
+        ?: preferredSourceUrl?.let { source -> playlistForSource(playlists, source) }
+        ?: playlists.firstOrNull()
+
+internal fun playlistForSource(playlists: List<Playlist>, sourceUrl: String?): Playlist? =
+    sourceUrl?.let { source -> playlists.firstOrNull { it.url == source } }
 
 object M3uParser {
     private val attribute = Regex("""([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s,]+))""")
