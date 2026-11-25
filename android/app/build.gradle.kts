@@ -14,8 +14,8 @@ android {
         applicationId = "com.segaiptv.player"
         minSdk = 24
         targetSdk = 35
-        versionCode = 47
-        versionName = "0.5.29"
+        versionCode = 48
+        versionName = "0.5.30"
         // Android Emulator: 10.0.2.2; physical device: your PC LAN IP / domain.
         val backendUrl = providers.gradleProperty("SEGA_IPTV_BACKEND_URL")
             .orElse("https://segaplayer.site").get()
@@ -25,6 +25,9 @@ android {
             (b.toInt() and 255) xor ((i * 31 + 93) and 255)
         }.joinToString(",")
         buildConfigField("int[]", "BACKEND_BYTES", "new int[]{$encoded}")
+        val endpointKey = providers.gradleProperty("SEGA_ENDPOINT_PUBLIC_KEY").orElse("").get()
+        require(endpointKey.matches(Regex("[A-Za-z0-9+/=]*"))) { "Endpoint key must be base64 DER" }
+        buildConfigField("String", "ENDPOINT_PUBLIC_KEY", "\"$endpointKey\"")
         buildConfigField("boolean", "DEVICE_PROOF", "false")
         buildConfigField("boolean", "ENFORCE_OWNER_SIGNATURE", "false")
     }
