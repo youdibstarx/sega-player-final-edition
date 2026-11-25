@@ -40,6 +40,26 @@ class BackendEndpointsTest {
         assertEquals(hosts.first(), BackendEndpoints.normalize(hosts.first() + "/"))
     }
 
+    @Test fun manualRecoveryRequiresValidatedInternetAndStartupTransportFailure() {
+        val timeout = BackendTransportFailure(BackendTransportFailure.Reason.TIMEOUT)
+        assertTrue(BackendEndpoints.canOfferRecovery(true, true, timeout))
+        assertFalse(BackendEndpoints.canOfferRecovery(true, false, timeout))
+        assertFalse(BackendEndpoints.canOfferRecovery(false, true, timeout))
+        assertFalse(BackendEndpoints.canOfferRecovery(true, true, BackendAccessDenied()))
+        assertFalse(BackendEndpoints.canOfferRecovery(true, true, BackendHttpError(429)))
+    }
+
+    @Test fun manualAddressRequiresHttpsAndSignedMembershipWithoutRollback() {
+        assertEquals("https://segaplayer.site", BackendEndpoints.manualUrl(" segaplayer.site "))
+        assertThrows(Exception::class.java) { BackendEndpoints.manualUrl("http://segaplayer.site") }
+        val replacement = listOf("https://new.example.com", hosts.last())
+        assertTrue(BackendEndpoints.acceptsManualHost(replacement.first(), 3, replacement, 2, hosts))
+        assertFalse(BackendEndpoints.acceptsManualHost(replacement.first(), 1, replacement, 2, hosts))
+        assertFalse(BackendEndpoints.acceptsManualHost(replacement.first(), 2, replacement, 2, hosts))
+        assertFalse(BackendEndpoints.acceptsManualHost("https://other.example.com", 3, replacement, 2, hosts))
+        assertTrue(BackendEndpoints.acceptsManualHost(hosts.first(), 2, hosts, 2, hosts))
+    }
+
     @Test fun configurationSignatureRejectsTamperingAndOtherKeys() {
         val generator = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }
         val key = generator.generateKeyPair()
