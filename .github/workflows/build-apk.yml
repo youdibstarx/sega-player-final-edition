@@ -2,7 +2,7 @@ name: Build SEGA PLAYER V3 Secure APK
 on:
   workflow_dispatch:
   push:
-    branches: [main, fix/commercial-batch-one, fix/commercial-batch-two, fix/0.5.16-full-stack-compatible, feature/0.5.17-dashboard-network-m3u, fix/android7-network-compat, fix/0.5.25-tv-remote-focus-layout, fix/0.5.26-ffmpeg-4k-audio, fix/0.5.26-tv-poster-retry-cache, fix/0.5.28-audit-poster-stability, fix/0.5.29-android7-update-file, fix/full-stack-audit-0.5.29]
+    branches: [main, fix/commercial-batch-one, fix/commercial-batch-two, fix/0.5.16-full-stack-compatible, feature/0.5.17-dashboard-network-m3u, fix/android7-network-compat, fix/0.5.25-tv-remote-focus-layout, fix/0.5.26-ffmpeg-4k-audio, fix/0.5.26-tv-poster-retry-cache, fix/0.5.28-audit-poster-stability, fix/0.5.29-android7-update-file, fix/full-stack-audit-0.5.29, fix/panel-segaplayer-site]
     paths:
       - 'android/**'
       - '.github/workflows/build-apk.yml'
@@ -36,7 +36,7 @@ jobs:
       - name: Test and build hardened APK
         working-directory: android
         env:
-          SEGA_BACKEND_URL: ${{ vars.SEGA_IPTV_BACKEND_URL }}
+          SEGA_BACKEND_URL: ${{ github.ref_name == 'fix/panel-segaplayer-site' && 'https://segaplayer.site' || vars.SEGA_IPTV_BACKEND_URL }}
         run: |
           if [ -n "$SEGA_BACKEND_URL" ]; then
             gradle :app:testDebugUnitTest :app:assembleHardened "-PSEGA_IPTV_BACKEND_URL=$SEGA_BACKEND_URL"
