@@ -18,6 +18,7 @@ from security import RateLimiter
 from proof import DeviceProofs
 from reseller import install as install_reseller
 from admin_auth import install as install_admin_auth
+from endpoint_management import install as install_endpoint_management
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field, field_validator
 
@@ -757,6 +758,7 @@ def server_time():
     return {"unix_seconds": unix, "unix": unix, "timestamp": unix,
             "server_time": unix, "server_time_ms": unix * 1000, "utc": utc.isoformat()}
 
+install_endpoint_management(APP, database, admin_only)
 install_reseller(APP, database, admin_only, limiter, BASE, add_months, now_iso)
 
 app = APP
