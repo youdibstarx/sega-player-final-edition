@@ -82,25 +82,28 @@ object Api {
                 MessageDigest.getInstance("SHA-256").digest(("sega-trial-v1:" + androidId).toByteArray())
                     .joinToString("") { "%02x".format(it.toInt() and 255) })
         }
-        fun signedRequest(path: String, method: String, body: String? = null, key: String? = null): JSONObject {
-            val proof = if (BuildConfig.DEVICE_PROOF) DeviceProof.headers(identity.id, method, path, body) else emptyMap()
-            return BackendTransport.request(BackendAddress.value(), path, method, body, key, proof)
-        }
-        if (BuildConfig.DEVICE_PROOF) {
-            // The existing 0.5.15 APK failed before registration when a deployed panel
-            // had not yet added /api/v1/time. Clock bootstrap is optional: do not
-            // disable proof or block device registration on a missing clock endpoint.
-            val unixSeconds = try {
-                val serverTime = BackendTransport.request(BackendAddress.value(), "/api/v1/time", "GET")
-                serverTime.getLong("unix_seconds")
-            } catch (ex: Exception) {
-                if (ex is kotlinx.coroutines.CancellationException) throw ex
-                System.currentTimeMillis() / 1000
+        val (selected, response) = BackendEndpoints.failover(BackendEndpoints.resolve(identity.context)) { base ->
+            fun signedRequest(path: String, method: String, body: String? = null, key: String? = null): JSONObject {
+                val proof = if (BuildConfig.DEVICE_PROOF) DeviceProof.headers(identity.id, method, path, body) else emptyMap()
+                return BackendTransport.request(base, path, method, body, key, proof)
             }
-            DeviceProof.synchronize(unixSeconds)
+            if (BuildConfig.DEVICE_PROOF) {
+                // The existing 0.5.15 APK failed before registration when a deployed panel
+                // had not yet added /api/v1/time. Clock bootstrap is optional: do not
+                // disable proof or block device registration on a missing clock endpoint.
+                val unixSeconds = try {
+                    val serverTime = BackendTransport.request(base, "/api/v1/time", "GET")
+                    serverTime.getLong("unix_seconds")
+                } catch (ex: Exception) {
+                    if (ex is kotlinx.coroutines.CancellationException) throw ex
+                    System.currentTimeMillis() / 1000
+                }
+                DeviceProof.synchronize(unixSeconds)
+            }
+            signedRequest("/api/v1/register", "POST", payload.toString())
+            signedRequest("/api/v1/config?device_id=${identity.id}", "GET", key = identity.key)
         }
-        signedRequest("/api/v1/register", "POST", payload.toString())
-        val response = signedRequest("/api/v1/config?device_id=${identity.id}", "GET", key = identity.key)
+        BackendAddress.select(selected)
         val rawPlaylists = response.optJSONArray("playlists") ?: JSONArray()
         val lists = (0 until rawPlaylists.length()).map { n ->
             val p = rawPlaylists.getJSONObject(n)
