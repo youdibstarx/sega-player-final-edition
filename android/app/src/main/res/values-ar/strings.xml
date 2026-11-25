@@ -154,6 +154,17 @@
     <string name="subscription_days">متبقي %1$d يوم</string>
     <string name="connection_and_updates">الاتصال والتحديثات</string>
     <string name="refresh_posters">تحديث صور الأفلام والمسلسلات</string>
+    <string name="recovery_title">استرجاع الاتصال بالخادم</string>
+    <string name="recovery_explanation">الإنترنت متاح، لكن تعذر الاتصال باللوحة. أدخل عنوان الخادم الرسمي الجديد من الإدارة.</string>
+    <string name="recovery_url">رابط الخادم الجديد</string>
+    <string name="recovery_connect">التحقق والاتصال</string>
+    <string name="recovery_retry">إعادة محاولة الروابط المعروفة</string>
+    <string name="recovery_invalid">أدخل نطاق HTTPS صالحاً.</string>
+    <string name="recovery_offline">لا يوجد اتصال مؤكد بالإنترنت. تحقق من الشبكة.</string>
+    <string name="recovery_key_missing">هذه النسخة لا تحتوي على مفتاح التحقق من الاسترجاع. تواصل مع الإدارة.</string>
+    <string name="recovery_unreachable">تعذر الوصول إلى خدمة الاسترجاع. تحقق من الرابط وحاول مجدداً.</string>
+    <string name="recovery_untrusted">لم يقدم الخادم إعدادات حديثة وموثوقة.</string>
+    <string name="recovery_storage">تعذر حفظ الإعدادات الموثوقة.</string>
 </resources>
 
 
