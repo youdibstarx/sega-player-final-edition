@@ -154,6 +154,17 @@
     <string name="subscription_days">Quedan %1$d días</string>
     <string name="connection_and_updates">Conexión y actualizaciones</string>
     <string name="refresh_posters">Actualizar carteles</string>
+    <string name="recovery_title">Recuperar la conexión al servidor</string>
+    <string name="recovery_explanation">Hay conexión a Internet, pero el panel no responde. Introduzca la nueva dirección oficial facilitada por el administrador.</string>
+    <string name="recovery_url">Nueva dirección del servidor</string>
+    <string name="recovery_connect">Verificar y conectar</string>
+    <string name="recovery_retry">Reintentar servidores conocidos</string>
+    <string name="recovery_invalid">Introduzca un dominio HTTPS válido.</string>
+    <string name="recovery_offline">Conexión a Internet no confirmada. Revise la red.</string>
+    <string name="recovery_key_missing">Esta versión no contiene la clave de verificación. Contacte con el administrador.</string>
+    <string name="recovery_unreachable">No se puede acceder al servicio de recuperación. Revise la dirección.</string>
+    <string name="recovery_untrusted">El servidor no proporciona una configuración fiable y actual.</string>
+    <string name="recovery_storage">No se pudo guardar la configuración verificada.</string>
 </resources>
 
 
