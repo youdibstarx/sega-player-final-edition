@@ -56,7 +56,7 @@ jobs:
       - name: Package complete panel code without data or secrets
         run: |
           mkdir -p dist
-          tar -czf dist/SEGA_PANEL_AUDIT_CANDIDATE.tar.gz -C panel main.py admin_auth.py reseller.py proof.py security.py requirements.txt requirements-dev.txt Dockerfile static README_SECURITY.md PORTAL_UPGRADE_AR.md
+          tar -czf dist/SEGA_PANEL_AUDIT_CANDIDATE.tar.gz -C panel main.py admin_auth.py endpoint_management.py reseller.py proof.py security.py requirements.txt requirements-dev.txt Dockerfile static README_SECURITY.md PORTAL_UPGRADE_AR.md
       - uses: actions/upload-artifact@v4
         with:
           name: SEGA-panel-audit-candidate
