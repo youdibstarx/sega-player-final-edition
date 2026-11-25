@@ -154,6 +154,17 @@
     <string name="subscription_days">%1$d jours restants</string>
     <string name="connection_and_updates">Connexion et mises à jour</string>
     <string name="refresh_posters">Actualiser les affiches</string>
+    <string name="recovery_title">Rétablir la connexion au serveur</string>
+    <string name="recovery_explanation">Internet est disponible, mais le panneau est inaccessible. Saisissez la nouvelle adresse officielle fournie par votre administrateur.</string>
+    <string name="recovery_url">Nouvelle adresse du serveur</string>
+    <string name="recovery_connect">Vérifier et connecter</string>
+    <string name="recovery_retry">Réessayer les serveurs connus</string>
+    <string name="recovery_invalid">Saisissez un domaine HTTPS valide.</string>
+    <string name="recovery_offline">Connexion Internet non confirmée. Vérifiez le réseau.</string>
+    <string name="recovery_key_missing">La clé de vérification est absente de cette version. Contactez votre administrateur.</string>
+    <string name="recovery_unreachable">Service de récupération inaccessible. Vérifiez le lien.</string>
+    <string name="recovery_untrusted">Ce serveur ne fournit pas de configuration fiable et récente.</string>
+    <string name="recovery_storage">Impossible de sauvegarder la configuration vérifiée.</string>
 </resources>
 
 
