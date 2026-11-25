@@ -154,6 +154,17 @@
     <string name="subscription_days">%1$d days left</string>
     <string name="connection_and_updates">Connection and updates</string>
     <string name="refresh_posters">Refresh posters</string>
+    <string name="recovery_title">Recover server connection</string>
+    <string name="recovery_explanation">Internet is available, but the panel cannot be reached. Enter a new official server address from your administrator.</string>
+    <string name="recovery_url">New server address</string>
+    <string name="recovery_connect">Verify and connect</string>
+    <string name="recovery_retry">Retry known servers</string>
+    <string name="recovery_invalid">Enter a valid HTTPS domain.</string>
+    <string name="recovery_offline">No validated internet connection. Check your network.</string>
+    <string name="recovery_key_missing">This build lacks the recovery verification key. Contact the administrator.</string>
+    <string name="recovery_unreachable">Cannot reach the recovery endpoint. Check the address and try again.</string>
+    <string name="recovery_untrusted">This server did not provide a trusted, current configuration.</string>
+    <string name="recovery_storage">Could not save the verified configuration.</string>
 </resources>
 
 
