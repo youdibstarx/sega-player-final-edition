@@ -58,6 +58,47 @@ internal object BackendEndpoints {
         Config(rev, urls)
     }.getOrNull()
 
+    internal fun manualUrl(input: String): String {
+        val text = input.trim()
+        require(text.length in 1..270)
+        return normalize(if (text.contains("://")) text else "https://$text")
+    }
+
+    internal fun hasValidatedInternet(context: Context): Boolean = runCatching {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val capabilities = cm.getNetworkCapabilities(cm.activeNetwork)
+        capabilities?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
+            capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }.getOrDefault(false)
+
+    internal fun canOfferRecovery(neverVerified: Boolean, online: Boolean, failure: Exception): Boolean =
+        neverVerified && online && retryable(failure)
+
+    internal fun acceptsManualHost(host: String, revision: Long, urls: List<String>,
+        savedRevision: Long, savedUrls: List<String>): Boolean =
+        host in urls && (revision > savedRevision || revision == savedRevision && urls == savedUrls)
+
+    enum class RecoveryResult { SAVED, INVALID_URL, OFFLINE, KEY_UNAVAILABLE, UNREACHABLE, UNTRUSTED, STORAGE_FAILED }
+
+    @Synchronized
+    fun recover(context: Context, input: String): RecoveryResult {
+        if (!hasValidatedInternet(context)) return RecoveryResult.OFFLINE
+        val url = runCatching { manualUrl(input) }.getOrNull() ?: return RecoveryResult.INVALID_URL
+        if (BuildConfig.ENDPOINT_PUBLIC_KEY.isBlank()) return RecoveryResult.KEY_UNAVAILABLE
+        val prefs = context.getSharedPreferences("sega_endpoints_v1", Context.MODE_PRIVATE)
+        val saved = decode(prefs.getString("envelope", "").orEmpty())
+        // The manually entered host is not trusted yet. Never send credentials or proofs here.
+        val envelope = runCatching {
+            BackendTransport.request(url, "/api/v1/endpoints", "GET",
+                connectTimeoutMs = 6000, readTimeoutMs = 6000).toString()
+        }.getOrNull() ?: return RecoveryResult.UNREACHABLE
+        val candidate = decode(envelope) ?: return RecoveryResult.UNTRUSTED
+        if (!acceptsManualHost(url, candidate.revision, candidate.urls,
+                saved?.revision ?: 0L, saved?.urls.orEmpty())) return RecoveryResult.UNTRUSTED
+        if (!prefs.edit().putString("envelope", envelope).commit()) return RecoveryResult.STORAGE_FAILED
+        return RecoveryResult.SAVED
+    }
+
     // Discovery requests contain no identity, proof or device key. Signed cache is verified on every read.
     @Synchronized
     fun resolve(context: Context): List<String> {
