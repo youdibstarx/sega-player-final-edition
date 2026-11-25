@@ -122,6 +122,9 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
     var catalogueToken by remember { mutableIntStateOf(-1) }
     var catalogueSources by remember { mutableStateOf<List<Playlist>?>(null) }
     var hasLoadedOnce by remember { mutableStateOf(false) }
+    var recoveryRequired by remember { mutableStateOf(false) }
+    var recoveryBusy by remember { mutableStateOf(false) }
+    var recoveryResult by remember { mutableStateOf<BackendEndpoints.RecoveryResult?>(null) }
     var page by remember { mutableStateOf("home") }
     var playing by remember { mutableStateOf<Channel?>(null) }
     val categoryMemory = remember { CategoryMemory() }
@@ -167,12 +170,14 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
     LaunchedEffect(Unit) {
         while (true) {
             delay(5 * 60 * 1000L)
-            if (!channelsLoading) activationToken++
+            if (!channelsLoading && !recoveryBusy && !recoveryRequired) activationToken++
         }
     }
 
     LaunchedEffect(refreshToken, activationToken) {
-        loading = !hasLoadedOnce
+        loading = !hasLoadedOnce || recoveryRequired
+        recoveryRequired = false
+        recoveryResult = null
         channelsLoading = false
         message = ""
         try {
@@ -237,6 +242,8 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
         } catch (ex: Exception) {
             if (ex is CancellationException) throw ex
             val lastVerified = verifiedAt
+            recoveryRequired = BackendEndpoints.canOfferRecovery(lastVerified == null,
+                BackendEndpoints.hasValidatedInternet(context), ex)
             val graceExpired = lastVerified == null ||
                 AccessGrace.remaining(lastVerified, android.os.SystemClock.elapsedRealtime()) == 0L
             if (ex is BackendAccessDenied || graceExpired) {
@@ -312,6 +319,22 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
                         Spacer(Modifier.height(15.dp))
                         Text(tr(R.string.connecting), color = mutedColor)
                     }
+                } else if (recoveryRequired) {
+                    ServerRecoveryScreen(recoveryBusy, recoveryResult, onConnect = { address ->
+                        if (!recoveryBusy) {
+                            recoveryBusy = true
+                            recoveryResult = null
+                            scope.launch {
+                                try {
+                                    val result = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        BackendEndpoints.recover(context.applicationContext, address)
+                                    }
+                                    if (result == BackendEndpoints.RecoveryResult.SAVED) refreshToken++
+                                    else recoveryResult = result
+                                } finally { recoveryBusy = false }
+                            }
+                        }
+                    }, onRetry = { if (!recoveryBusy) refreshToken++ })
                 } else if (!config.active) {
                     DeviceActivationScreen(identity, message, onRefresh = { refreshToken++ },
                         copyMac = { clipboard.setText(AnnotatedString(identity.virtualMac)) },
