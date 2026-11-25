@@ -41,7 +41,7 @@ internal object BackendTransport {
         return output.toString("UTF-8")
     }
     internal fun request(base: String, path: String, method: String, payload: String? = null,
-        deviceKey: String? = null, proofHeaders: Map<String, String> = emptyMap(), open: (URL) -> HttpsURLConnection = { NetworkClient.open(it) as HttpsURLConnection }): JSONObject {
+        deviceKey: String? = null, proofHeaders: Map<String, String> = emptyMap(), connectTimeoutMs: Int = 12000, readTimeoutMs: Int = 15000, open: (URL) -> HttpsURLConnection = { NetworkClient.open(it) as HttpsURLConnection }): JSONObject {
         val url = endpoint(base, path)
         var connection: HttpsURLConnection? = null
         try {
@@ -50,8 +50,8 @@ internal object BackendTransport {
             // Keep Android's normal certificate chain and hostname verification.
             con.instanceFollowRedirects = false
             con.useCaches = false
-            con.connectTimeout = 12000
-            con.readTimeout = 15000
+            con.connectTimeout = connectTimeoutMs
+            con.readTimeout = readTimeoutMs
             con.requestMethod = method
             con.setRequestProperty("Accept", "application/json")
             con.setRequestProperty("Cache-Control", "no-store")
