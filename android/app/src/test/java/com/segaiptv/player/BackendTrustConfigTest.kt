@@ -25,9 +25,9 @@ class BackendTrustConfigTest {
         val factory = DocumentBuilderFactory.newInstance()
         val xml = factory.newDocumentBuilder().parse(File("src/main/res/xml/network_security_config.xml"))
         val domains = xml.getElementsByTagName("domain")
-        assertEquals(2, domains.length)
+        assertEquals(3, domains.length)
         val domain = domains.item(0) as org.w3c.dom.Element
-        assertEquals(setOf("tchach.online", "sega.faster4k.xyz"),
+        assertEquals(setOf("tchach.online", "sega.faster4k.xyz", "segaplayer.site"),
             (0 until domains.length).map { domains.item(it).textContent.trim() }.toSet())
         for (i in 0 until domains.length) {
             assertEquals("false", (domains.item(i) as org.w3c.dom.Element).getAttribute("includeSubdomains"))
