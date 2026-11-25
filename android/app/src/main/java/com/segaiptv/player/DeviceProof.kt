@@ -50,7 +50,10 @@ internal object DeviceProof {
 }
 
 internal object BackendAddress {
-    fun value(): String = BuildConfig.BACKEND_BYTES.mapIndexed { i, v ->
+    @Volatile private var active: String? = null
+    fun value(): String = active ?: builtIn()
+    fun select(url: String) { active = url }
+    fun builtIn(): String = BuildConfig.BACKEND_BYTES.mapIndexed { i, v ->
         (v xor ((i * 31 + 93) and 255)).toByte()
     }.toByteArray().toString(Charsets.UTF_8)
 }
