@@ -97,3 +97,29 @@ $('#admin-logout').onclick = async () => {
     button.disabled = false;
   }
 };
+
+async function loadEndpointSettings(){
+  const form=$('#endpoint-form'); if(!form)return;
+  form.querySelector('button').disabled=true;
+  try{
+    const config=await call('/admin/api/endpoints');
+    form.elements.primary.value=config.primary;
+    form.elements.backup.value=config.backup;
+    form.querySelector('button').disabled=!config.signing_enabled;
+    $('#endpoint-status').textContent=config.signing_enabled?'التوقيع مفعّل — مراجعة '+config.revision:'يلزم إعداد مفتاح توقيع الروابط قبل النشر';
+  }catch(e){$('#endpoint-status').textContent='تعذر تحميل إعدادات الروابط';}
+}
+const endpointForm=$('#endpoint-form');
+if(endpointForm){
+  endpointForm.onsubmit=async ev=>{
+    ev.preventDefault();
+    if(!confirm('تأكد من أن النطاقين يربطان بنفس اللوحة وقاعدة البيانات قبل نشر التغيير. متابعة؟'))return;
+    const button=endpointForm.querySelector('button');
+    button.disabled=true;
+    try{
+      await call('/admin/api/endpoints',{method:'PUT',body:JSON.stringify({primary:endpointForm.elements.primary.value,backup:endpointForm.elements.backup.value})});
+      toast('تم نشر روابط الخادم');await loadEndpointSettings();
+    }catch(e){toast(e.message);button.disabled=false;}
+  };
+  document.querySelector('[data-tab="appearance"]')?.addEventListener('click',loadEndpointSettings);
+}
