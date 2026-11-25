@@ -18,7 +18,7 @@ android {
         versionName = "0.5.29"
         // Android Emulator: 10.0.2.2; physical device: your PC LAN IP / domain.
         val backendUrl = providers.gradleProperty("SEGA_IPTV_BACKEND_URL")
-            .orElse("https://tchach.online").get()
+            .orElse("https://segaplayer.site").get()
         require(URI(backendUrl).scheme == "https") { "Panel URL must use HTTPS" }
         // Obfuscation only: no URL encryption key or shared authentication secret in the APK.
         val encoded = backendUrl.toByteArray(Charsets.UTF_8).mapIndexed { i, b ->
