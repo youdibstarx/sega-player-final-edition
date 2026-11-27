@@ -124,6 +124,12 @@
     <string name="update_permission">Allow installation from this app, then return and tap Update.</string>
 
     <string name="subscriptions_title">My subscriptions</string>
+    <string name="playlist_choose_action">Choose an action for this playlist.</string>
+    <string name="playlist_connect">Connect</string>
+    <string name="playlist_delete">Remove from this app</string>
+    <string name="playlist_delete_title">Remove playlist?</string>
+    <string name="playlist_delete_message">This hides the playlist on this device. It remains assigned in your control panel.</string>
+    <string name="playlist_active">Connected</string>
     <string name="connection_settings">Connection</string>
     <string name="dns_hint">DNS applies to this app. Reopen playback after changing it. While a VPN is active, its DNS is used.</string>
     <string name="dns_automatic">Automatic · device DNS</string>

@@ -294,7 +294,10 @@ internal fun PosterArtwork(title: VodTitle, modifier: Modifier, refreshPosters: 
 @Composable
 fun PlaylistScreen(config: AppConfig, identity: DeviceIdentity, loading: Boolean, warnings: String,
     onRefresh: () -> Unit, onLocalFile: () -> Unit, onCopyMac: () -> Unit,
-    onCopyKey: () -> Unit, modifier: Modifier = Modifier) {
+    onCopyKey: () -> Unit, modifier: Modifier = Modifier, playlists: List<Playlist> = config.playlists,
+    activePlaylistId: Int? = null, onConnect: (Playlist) -> Unit = {}, onDelete: (Playlist) -> Unit = {}) {
+    var selectedForAction by remember { mutableStateOf<Playlist?>(null) }
+    var selectedForDelete by remember { mutableStateOf<Playlist?>(null) }
     Row(modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1.65f).fillMaxHeight()) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -308,10 +311,11 @@ fun PlaylistScreen(config: AppConfig, identity: DeviceIdentity, loading: Boolean
                 fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(bottom = 8.dp)) {
-                items(config.playlists, key = { it.id }) { playlist ->
-                    SubscriptionCard(playlist, Modifier.fillMaxWidth())
+                items(playlists, key = { it.id }) { playlist ->
+                    SubscriptionCard(playlist, Modifier.fillMaxWidth().clickable { selectedForAction = playlist },
+                        active = playlist.id == activePlaylistId)
                 }
-                if (config.playlists.isEmpty()) item {
+                if (playlists.isEmpty()) item {
                     Row(Modifier.fillMaxWidth().background(v3Panel, RoundedCornerShape(14.dp)).padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("▤", color = v3Gold, fontSize = 28.sp)
@@ -321,6 +325,29 @@ fun PlaylistScreen(config: AppConfig, identity: DeviceIdentity, loading: Boolean
             }
         }
         DeviceActivationCard(identity, onCopyMac, onCopyKey, Modifier.weight(1f).fillMaxHeight())
+    }
+    selectedForAction?.let { playlist ->
+        AlertDialog(onDismissRequest = { selectedForAction = null },
+            title = { Text(playlist.name) },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(tr(R.string.playlist_choose_action))
+                TextButton(onClick = { selectedForDelete = playlist; selectedForAction = null }) {
+                    Text(tr(R.string.playlist_delete))
+                }
+            } },
+            confirmButton = { TextButton(onClick = { onConnect(playlist); selectedForAction = null }) {
+                Text(tr(R.string.playlist_connect))
+            } },
+            dismissButton = { TextButton(onClick = { selectedForAction = null }) { Text(tr(R.string.close)) } })
+    }
+    selectedForDelete?.let { playlist ->
+        AlertDialog(onDismissRequest = { selectedForDelete = null },
+            title = { Text(tr(R.string.playlist_delete_title)) },
+            text = { Text(tr(R.string.playlist_delete_message)) },
+            confirmButton = { TextButton(onClick = { onDelete(playlist); selectedForDelete = null }) {
+                Text(tr(R.string.playlist_delete))
+            } },
+            dismissButton = { TextButton(onClick = { selectedForDelete = null }) { Text(tr(R.string.close)) } })
     }
 }
 

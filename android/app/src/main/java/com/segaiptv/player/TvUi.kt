@@ -61,11 +61,13 @@ private val tvPages = listOf(
 
 @Composable
 fun TvShell(
-    config: AppConfig, identity: DeviceIdentity, page: String,
+    config: AppConfig, allPlaylists: List<Playlist> = config.playlists, activePlaylistId: Int? = null,
+    identity: DeviceIdentity, page: String,
     onPageChange: (String) -> Unit, channels: List<Channel>, loading: Boolean,
     favorites: Set<String>, accent: Color, warnings: String, error: String,
     onRefresh: () -> Unit, onPlay: (Channel) -> Unit, onToggleFavorite: (Channel) -> Unit,
     onLocalFile: () -> Unit, onCopyMac: () -> Unit, onCopyKey: () -> Unit,
+    onConnectPlaylist: (Playlist) -> Unit = {}, onDeletePlaylist: (Playlist) -> Unit = {},
     refreshToken: Int = 0, onCategoryLoaded: (List<Channel>) -> Unit = {},
     categoryMemory: CategoryMemory = remember { CategoryMemory() }
 ) {
@@ -105,7 +107,8 @@ fun TvShell(
             "favorites" -> LiveTvV3(Modifier.weight(1f), channels.filter { it.url in favorites }, loading,
                 favorites, catalogueWarnings(warnings), onPlay, onToggleFavorite, includeVod = true, search = query)
             "playlists" -> PlaylistScreen(config, identity, loading, warnings, onRefresh, onLocalFile,
-                onCopyMac, onCopyKey, Modifier.weight(1f))
+                onCopyMac, onCopyKey, Modifier.weight(1f), playlists = allPlaylists,
+                activePlaylistId = activePlaylistId, onConnect = onConnectPlaylist, onDelete = onDeletePlaylist)
             else -> TvSettings(config, identity, channels.size, accent, error,
                 onCopyMac, onCopyKey, Modifier.weight(1f), channels, warnings, loading, updates, { onPageChange("channels") })
         }

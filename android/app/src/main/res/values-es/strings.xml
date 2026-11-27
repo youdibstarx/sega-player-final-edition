@@ -124,6 +124,12 @@
     <string name="update_permission">Permite esta fuente, vuelve y pulsa Actualizar.</string>
 
     <string name="subscriptions_title">Mis suscripciones</string>
+    <string name="playlist_choose_action">Elija una acción para esta lista.</string>
+    <string name="playlist_connect">Conectar</string>
+    <string name="playlist_delete">Quitar de la aplicación</string>
+    <string name="playlist_delete_title">¿Quitar la lista?</string>
+    <string name="playlist_delete_message">La lista se ocultará en este dispositivo. Seguirá asignada en el panel de control.</string>
+    <string name="playlist_active">Conectada</string>
     <string name="connection_settings">Conexión</string>
     <string name="dns_hint">El DNS se aplica a esta app. Reinicia la reproducción tras cambiarlo. Un VPN activo usa su DNS.</string>
     <string name="dns_automatic">Automático · DNS del dispositivo</string>

@@ -60,6 +60,21 @@ class DeviceIdentity(internal val context: Context) {
         get() = prefs.getString("local_uri", null)
         set(value) { prefs.edit().putString("local_uri", value).apply() }
 
+    fun activePlaylistId(): Int? = prefs.getInt("active_playlist_id", -1).takeIf { it >= 0 }
+
+    fun saveActivePlaylistId(id: Int?) {
+        prefs.edit().putInt("active_playlist_id", id ?: -1).apply()
+    }
+
+    fun hiddenPlaylistIds(): Set<Int> = runCatching {
+        val arr = JSONArray(prefs.getString("hidden_playlist_ids", "[]"))
+        (0 until arr.length()).map { arr.getInt(it) }.toSet()
+    }.getOrDefault(emptySet())
+
+    fun saveHiddenPlaylistIds(ids: Set<Int>) {
+        prefs.edit().putString("hidden_playlist_ids", JSONArray(ids.toList()).toString()).apply()
+    }
+
     fun readFavorites(): Set<String> = runCatching {
         val arr = JSONArray(prefs.getString("favorites", "[]"))
         (0 until arr.length()).map { arr.getString(it) }.toSet()

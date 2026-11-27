@@ -125,7 +125,8 @@ internal fun SubscriptionStrip(config: AppConfig) {
 }
 
 @Composable
-internal fun SubscriptionCard(playlist: Playlist, modifier: Modifier = Modifier, compact: Boolean = false) {
+internal fun SubscriptionCard(playlist: Playlist, modifier: Modifier = Modifier, compact: Boolean = false,
+    active: Boolean = false) {
     var info by remember(playlist.url) { mutableStateOf<SubscriptionInfo?>(null) }
     var now by remember { mutableLongStateOf(java.time.Instant.now().epochSecond) }
     val language = LocalAppLanguage.current.code
@@ -152,8 +153,11 @@ internal fun SubscriptionCard(playlist: Playlist, modifier: Modifier = Modifier,
             Text("▤", color = appTheme.accent, fontSize = if (compact) 20.sp else 26.sp)
         }
         Column(Modifier.weight(1f)) {
-            Text(playlist.name, fontSize = if (compact) 12.sp else 18.sp, fontWeight = FontWeight.Bold,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(playlist.name, Modifier.weight(1f, fill = false), fontSize = if (compact) 12.sp else 18.sp,
+                    fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (active) Text(tr(R.string.playlist_active), color = appTheme.accent, fontSize = 9.sp, maxLines = 1)
+            }
             Text(tr(R.string.provider_expiry), fontSize = 9.sp, color = Color.LightGray)
             Text(status, fontSize = if (compact) 10.sp else 13.sp, maxLines = 2)
         }

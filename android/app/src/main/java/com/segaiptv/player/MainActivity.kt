@@ -127,10 +127,14 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
     var recoveryResult by remember { mutableStateOf<BackendEndpoints.RecoveryResult?>(null) }
     var page by remember { mutableStateOf("home") }
     var playing by remember { mutableStateOf<Channel?>(null) }
+    var activePlaylistId by remember { mutableStateOf(identity.activePlaylistId()) }
+    var hiddenPlaylistIds by remember { mutableStateOf(identity.hiddenPlaylistIds()) }
     val categoryMemory = remember { CategoryMemory() }
     var favorites by remember { mutableStateOf(identity.readFavorites()) }
     val color = appTheme.accent
     val allChannels = rememberCatalogueWork<List<Channel>>(emptyList(), remoteChannels, localChannels, selectedChannels) { (remoteChannels + localChannels + selectedChannels).distinctBy { it.url } }
+    val availablePlaylists = config.playlists.filterNot { it.id in hiddenPlaylistIds }
+    val activePlaylists = availablePlaylists.filter { it.id == activePlaylistId }
     val isTv = remember(context) {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
             (context.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager)
@@ -187,14 +191,22 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
             hasLoadedOnce = true
             loading = false
             if (!freshConfig.active) { playing = null; categoryMemory.clear() }
-            if (freshConfig.active && catalogueNeedsRefresh(catalogueToken, refreshToken, catalogueSources, freshConfig.playlists)) {
+            val availablePlaylists = freshConfig.playlists.filterNot { it.id in hiddenPlaylistIds }
+            val selectedPlaylistId = activePlaylistId?.takeIf { id -> availablePlaylists.any { it.id == id } }
+                ?: availablePlaylists.firstOrNull()?.id
+            if (activePlaylistId != selectedPlaylistId) {
+                activePlaylistId = selectedPlaylistId
+                identity.saveActivePlaylistId(selectedPlaylistId)
+            }
+            val activePlaylists = availablePlaylists.filter { it.id == selectedPlaylistId }
+            if (freshConfig.active && catalogueNeedsRefresh(catalogueToken, refreshToken, catalogueSources, activePlaylists)) {
                 channelsLoading = true
                 playlistErrors = ""
-                selectedChannels = FavoriteCatalogue.read(context, favorites, freshConfig.playlists)
+                selectedChannels = FavoriteCatalogue.read(context, favorites, activePlaylists)
                 // Reuse loaded objects on manual refresh instead of deserializing a second library.
                 val existing = withContext(kotlinx.coroutines.Dispatchers.Default) { remoteChannels.groupBy { it.sourceUrl } }
                 val cached = mutableMapOf<Int, List<Channel>>()
-                for (playlist in freshConfig.playlists.filter { XtreamSource.from(it.url) == null }.take(30)) {
+                for (playlist in activePlaylists.filter { XtreamSource.from(it.url) == null }.take(30)) {
                     cached[playlist.id] = existing[playlist.url] ?: LibraryCache.read(context, playlist)
                 }
                 remoteChannels = withContext(kotlinx.coroutines.Dispatchers.Default) { cached.values.flatten() }
@@ -202,7 +214,7 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
                 val loaded = mutableListOf<Channel>()
                 val failed = mutableListOf<String>()
                 val forceRefresh = refreshToken > 0 && refreshToken != catalogueToken
-                for (playlist in freshConfig.playlists.filter { XtreamSource.from(it.url) == null }.take(30)) {
+                for (playlist in activePlaylists.filter { XtreamSource.from(it.url) == null }.take(30)) {
                     val saved = cached[playlist.id].orEmpty()
                     val needsDownload = forceRefresh || saved.isEmpty()
                     val result = refreshVisiblePlaylist(saved,
@@ -231,7 +243,7 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
                 }
                 if (failed.isNotEmpty()) playlistErrors = failed.joinToString("\n")
                 catalogueToken = refreshToken
-                catalogueSources = freshConfig.playlists
+                catalogueSources = activePlaylists
                 channelsLoading = false
             } else if (!freshConfig.active) {
                 remoteChannels = emptyList()
@@ -342,7 +354,27 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
                 } else {
                     screenState.SaveableStateProvider(page) {
                     TvShell(
-                        config = config, identity = identity, page = page,
+                        config = config.copy(playlists = activePlaylists), allPlaylists = availablePlaylists,
+                        activePlaylistId = activePlaylistId, identity = identity, page = page,
+                        onConnectPlaylist = { playlist ->
+                            if (activePlaylistId != playlist.id) {
+                                activePlaylistId = playlist.id
+                                identity.saveActivePlaylistId(playlist.id)
+                                categoryMemory.clear()
+                                refreshToken++
+                            }
+                        },
+                        onDeletePlaylist = { playlist ->
+                            hiddenPlaylistIds = hiddenPlaylistIds + playlist.id
+                            identity.saveHiddenPlaylistIds(hiddenPlaylistIds)
+                            if (activePlaylistId == playlist.id) {
+                                val next = config.playlists.firstOrNull { it.id !in hiddenPlaylistIds }?.id
+                                activePlaylistId = next
+                                identity.saveActivePlaylistId(next)
+                                categoryMemory.clear()
+                            }
+                            refreshToken++
+                        },
                         refreshToken = refreshToken, categoryMemory = categoryMemory, onCategoryLoaded = {
                             selectedChannels = (it + selectedChannels.filter { ch -> ch.url in favorites }).distinctBy { ch -> ch.url }
                             val snapshots = allChannels.filter { ch -> ch.url in favorites } + it.filter { ch -> ch.url in favorites }
