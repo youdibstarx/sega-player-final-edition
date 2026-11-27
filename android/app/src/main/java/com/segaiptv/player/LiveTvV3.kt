@@ -16,9 +16,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.nativeKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -123,26 +120,27 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
                     var okHoldJob by remember(ch.url) { mutableStateOf<Job?>(null) }
                     var favoriteHandled by remember(ch.url) { mutableStateOf(false) }
                     val active = ch.url == selectedUrl
+                    val favoriteLabel = tr(R.string.favorite)
                     Row(Modifier.fillMaxWidth().height(34.dp)
                         .then(if (active) Modifier.focusRequester(selectedFocus) else Modifier)
                         .onPreviewKeyEvent { event ->
-                            val native = event.nativeKeyEvent
-                            val isOk = event.key == Key.DirectionCenter || event.key == Key.Enter ||
-                                native.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
+                            val isOk = event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
+                                event.keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
+                                event.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
                             if (!isOk) return@onPreviewKeyEvent false
-                            if (event.type == KeyEventType.KeyDown) {
-                                if (native.repeatCount == 0 && okHoldJob == null) {
+                            if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                                if (event.repeatCount == 0 && okHoldJob == null) {
                                     favoriteHandled = false
                                     okHoldJob = holdScope.launch {
                                         delay(3000)
                                         favoriteHandled = true
-                                        favoriteNotice = if (ch.url in favorites) "− ${tr(R.string.favorite)}: ${ch.name}"
-                                            else "+ ${tr(R.string.favorite)}: ${ch.name}"
+                                        favoriteNotice = if (ch.url in favorites) "− $favoriteLabel: ${ch.name}"
+                                            else "+ $favoriteLabel: ${ch.name}"
                                         onToggleFavorite(ch)
                                     }
                                 }
                                 true
-                            } else if (event.type == KeyEventType.KeyUp) {
+                            } else if (event.action == android.view.KeyEvent.ACTION_UP) {
                                 val started = okHoldJob != null
                                 okHoldJob?.cancel()
                                 okHoldJob = null
