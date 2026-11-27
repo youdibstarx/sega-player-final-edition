@@ -124,12 +124,13 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
                     Row(Modifier.fillMaxWidth().height(34.dp)
                         .then(if (active) Modifier.focusRequester(selectedFocus) else Modifier)
                         .onPreviewKeyEvent { event ->
-                            val isOk = event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
-                                event.keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
-                                event.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
+                            val native = event.nativeKeyEvent
+                            val isOk = native.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
+                                native.keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
+                                native.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
                             if (!isOk) return@onPreviewKeyEvent false
-                            if (event.action == android.view.KeyEvent.ACTION_DOWN) {
-                                if (event.repeatCount == 0 && okHoldJob == null) {
+                            if (native.action == android.view.KeyEvent.ACTION_DOWN) {
+                                if (native.repeatCount == 0 && okHoldJob == null) {
                                     favoriteHandled = false
                                     okHoldJob = holdScope.launch {
                                         delay(3000)
@@ -140,7 +141,7 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
                                     }
                                 }
                                 true
-                            } else if (event.action == android.view.KeyEvent.ACTION_UP) {
+                            } else if (native.action == android.view.KeyEvent.ACTION_UP) {
                                 val started = okHoldJob != null
                                 okHoldJob?.cancel()
                                 okHoldJob = null
