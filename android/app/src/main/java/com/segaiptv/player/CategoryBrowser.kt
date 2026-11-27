@@ -18,6 +18,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import org.json.JSONArray
 
 @Composable
 internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page: String,
@@ -51,6 +52,21 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
     val localGroups = rememberCatalogueWork<Map<String, List<Channel>>>(emptyMap(), channels, kind, m3uOnly) {
         localCatalogueGroups(channels, kind, m3uOnly)
     }
+    val bouquetPrefs = remember(context) { context.getSharedPreferences("bouquet_order_v1", android.content.Context.MODE_PRIVATE) }
+    var savedBouquetOrder by remember { mutableStateOf(bouquetPrefs.getString("order", "[]").orEmpty()) }
+    val bouquetKeys = remember(categories, localGroups) {
+        categories.map { it.key } + localGroups.keys.map { "local:$it" }
+    }
+    val orderedBouquetKeys = remember(bouquetKeys, savedBouquetOrder) {
+        val savedKeys = runCatching {
+            val json = JSONArray(savedBouquetOrder)
+            List(json.length()) { json.getString(it) }
+        }.getOrDefault(emptyList())
+        val positions = savedKeys.withIndex().associate { it.value to it.index }
+        bouquetKeys.sortedBy { positions[it] ?: Int.MAX_VALUE }
+    }
+    var reorderBouquets by remember { mutableStateOf(false) }
+    val bouquetDraft = remember { mutableStateListOf<String>() }
     val selected = categories.firstOrNull { it.key == selectedKey }
     val localName = selectedKey?.takeIf { it.startsWith("local:") }?.removePrefix("local:")
     LaunchedEffect(providers, kind, refreshToken, retryCategories) {
@@ -93,6 +109,35 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
         }
     }
     BackHandler(selectedKey != null) { selectedKey = null }
+    if (reorderBouquets) AlertDialog(
+        onDismissRequest = { reorderBouquets = false },
+        title = { Text(tr(R.string.bouquet_order)) },
+        text = { LazyColumn(Modifier.fillMaxWidth().heightIn(max = 320.dp)) {
+            items(bouquetDraft) { key ->
+                val name = categories.firstOrNull { it.key == key }?.let {
+                    (if (providers.size > 1) "${it.playlist.name} · " else "") + it.name
+                } ?: key.removePrefix("local:")
+                val index = bouquetDraft.indexOf(key)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    TextButton(enabled = index > 0, onClick = {
+                        bouquetDraft.removeAt(index)
+                        bouquetDraft.add(index - 1, key)
+                    }) { Text("↑") }
+                    TextButton(enabled = index < bouquetDraft.lastIndex, onClick = {
+                        bouquetDraft.removeAt(index)
+                        bouquetDraft.add(index + 1, key)
+                    }) { Text("↓") }
+                }
+            }
+        } },
+        confirmButton = { TextButton(onClick = {
+            savedBouquetOrder = JSONArray(bouquetDraft.toList()).toString()
+            bouquetPrefs.edit().putString("order", savedBouquetOrder).apply()
+            reorderBouquets = false
+        }) { Text(tr(R.string.order_save)) } },
+        dismissButton = { TextButton(onClick = { reorderBouquets = false }) { Text(tr(R.string.close)) } }
+    )
     Row(modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         // Keep the category rail visible while only the selected category is fetched.
         Column(Modifier.fillMaxWidth(.22f).fillMaxHeight().background(v3Panel)) {
@@ -108,16 +153,24 @@ internal fun CategoryBrowser(modifier: Modifier, playlists: List<Playlist>, page
                     modifier = Modifier.padding(6.dp))
                 TvAction(tr(R.string.retry_catalogue), Modifier.fillMaxWidth()) { retryCategories++ }
             }
+            if (bouquetKeys.size > 1) TvAction(tr(R.string.bouquet_order), Modifier.fillMaxWidth()) {
+                bouquetDraft.clear()
+                bouquetDraft.addAll(orderedBouquetKeys)
+                reorderBouquets = true
+            }
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                items(categories.filter { selectedKey != null || query.isBlank() || it.name.contains(query, true) }, key = { it.key }) { category ->
-                    TvAction((if (providers.size > 1) "${category.playlist.name} · " else "") + category.name,
-                        Modifier.fillMaxWidth(), selected = selectedKey == category.key) {
-                        selectedKey = category.key; onChoose()
-                    }
-                }
-                items(localGroups.keys.filter { selectedKey != null || query.isBlank() || it.contains(query, true) }, key = { "local:$it" }) { name ->
-                    TvAction("$name (${localGroups[name]?.size ?: 0})", Modifier.fillMaxWidth(), selected = selectedKey == "local:$name") {
-                        selectedKey = "local:$name"; onChoose()
+                items(orderedBouquetKeys, key = { it }) { key ->
+                    val category = categories.firstOrNull { it.key == key }
+                    val localNameKey = key.takeIf { it.startsWith("local:") }?.removePrefix("local:")
+                    if (category != null && (selectedKey != null || query.isBlank() || category.name.contains(query, true))) {
+                        TvAction((if (providers.size > 1) "${category.playlist.name} · " else "") + category.name,
+                            Modifier.fillMaxWidth(), selected = selectedKey == category.key) {
+                            selectedKey = category.key; onChoose()
+                        }
+                    } else if (localNameKey != null && (selectedKey != null || query.isBlank() || localNameKey.contains(query, true))) {
+                        TvAction("$localNameKey (${localGroups[localNameKey]?.size ?: 0})", Modifier.fillMaxWidth(), selected = selectedKey == key) {
+                            selectedKey = key; onChoose()
+                        }
                     }
                 }
                 if (!loadingCategories && !localLoading && categories.isEmpty() && localGroups.isEmpty() && !categoryError)

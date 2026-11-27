@@ -112,6 +112,7 @@
     <string name="order_manual">Personalizado · elegir un grupo</string>
     <string name="order_edit">Reordenar canales</string>
     <string name="order_save">Guardar orden</string>
+    <string name="bouquet_order">Reordenar paquetes</string>
     <string name="update_group">Actualizaciones</string>
     <string name="update_check">Buscar actualizaciones</string>
     <string name="update_checking">Buscando actualizaciones…</string>

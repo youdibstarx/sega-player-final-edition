@@ -112,6 +112,7 @@
     <string name="order_manual">يدوي · اختر باقة</string>
     <string name="order_edit">تعديل ترتيب القنوات</string>
     <string name="order_save">حفظ الترتيب</string>
+    <string name="bouquet_order">ترتيب الباقات</string>
     <string name="update_group">تحديث التطبيق</string>
     <string name="update_check">البحث عن تحديث</string>
     <string name="update_checking">جارٍ البحث عن تحديث…</string>

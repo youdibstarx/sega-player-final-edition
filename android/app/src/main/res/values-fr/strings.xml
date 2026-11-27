@@ -112,6 +112,7 @@
     <string name="order_manual">Personnalisé · choisir un bouquet</string>
     <string name="order_edit">Réorganiser les chaînes</string>
     <string name="order_save">Enregistrer</string>
+    <string name="bouquet_order">Réorganiser les bouquets</string>
     <string name="update_group">Mises à jour</string>
     <string name="update_check">Vérifier les mises à jour</string>
     <string name="update_checking">Recherche en cours…</string>

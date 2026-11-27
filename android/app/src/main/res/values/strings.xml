@@ -112,6 +112,7 @@
     <string name="order_manual">Custom · choose a category</string>
     <string name="order_edit">Reorder channels</string>
     <string name="order_save">Save order</string>
+    <string name="bouquet_order">Reorder bouquets</string>
     <string name="update_group">App updates</string>
     <string name="update_check">Check for updates</string>
     <string name="update_checking">Checking for updates…</string>

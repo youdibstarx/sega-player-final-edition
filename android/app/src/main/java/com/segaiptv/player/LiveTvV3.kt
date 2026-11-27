@@ -16,12 +16,19 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.nativeKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 internal val v3Gold: Color
     @Composable get() = appTheme.accent
@@ -51,6 +58,7 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     var onlyFavorites by rememberSaveable { mutableStateOf(false) }
     var selectedUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(groups) { if (category !in groups) category = groups.keys.firstOrNull() }
     val filtered = rememberCatalogueWork<List<Channel>>(emptyList(), live, groups, category, onlyFavorites, favorites, search) {
         (if (onlyFavorites) live.filter { it.url in favorites } else if (search.isNotBlank()) live else groups[category].orEmpty())
@@ -59,7 +67,6 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
     val visible = if (orderScope == null) filtered else orderedChannels(orderScope, filtered, live, search.isBlank() && !onlyFavorites)
     val channelListState = rememberLazyListState()
     val selectedFocus = remember { FocusRequester() }
-    val context = androidx.compose.ui.platform.LocalContext.current
     val lastPlayedUrl = remember { ViewerStore.get(context).history(false).firstOrNull()?.channel?.url }
     var restoredSelection by remember { mutableStateOf(false) }
     LaunchedEffect(visible) {
@@ -76,6 +83,13 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
         }
     }
     var epgOpen by remember(selectedUrl) { mutableStateOf(false) }
+    var favoriteNotice by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(favoriteNotice) {
+        if (favoriteNotice != null) {
+            delay(1800)
+            favoriteNotice = null
+        }
+    }
     val selected = remember(live, selectedUrl) { live.firstOrNull { it.url == selectedUrl } }
     if (epgOpen && selected != null) EpgDialog(selected) { epgOpen = false }
     Column(modifier.fillMaxSize().background(appTheme.background.copy(alpha = .60f))) {
@@ -105,9 +119,40 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
                 if (!loading && visible.isEmpty()) item { Text(tr(R.string.no_channels), color = Color.LightGray, modifier = Modifier.padding(5.dp)) }
                 itemsIndexed(visible, key = { i, ch -> "$i-${ch.url}" }) { index, ch ->
                     var focused by remember { mutableStateOf(false) }
+                    val holdScope = rememberCoroutineScope()
+                    var okHoldJob by remember(ch.url) { mutableStateOf<Job?>(null) }
+                    var favoriteHandled by remember(ch.url) { mutableStateOf(false) }
                     val active = ch.url == selectedUrl
                     Row(Modifier.fillMaxWidth().height(34.dp)
                         .then(if (active) Modifier.focusRequester(selectedFocus) else Modifier)
+                        .onPreviewKeyEvent { event ->
+                            val native = event.nativeKeyEvent
+                            val isOk = event.key == Key.DirectionCenter || event.key == Key.Enter ||
+                                native.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
+                            if (!isOk) return@onPreviewKeyEvent false
+                            if (event.type == KeyEventType.KeyDown) {
+                                if (native.repeatCount == 0 && okHoldJob == null) {
+                                    favoriteHandled = false
+                                    okHoldJob = holdScope.launch {
+                                        delay(3000)
+                                        favoriteHandled = true
+                                        favoriteNotice = if (ch.url in favorites) "− ${tr(R.string.favorite)}: ${ch.name}"
+                                            else "+ ${tr(R.string.favorite)}: ${ch.name}"
+                                        onToggleFavorite(ch)
+                                    }
+                                }
+                                true
+                            } else if (event.type == KeyEventType.KeyUp) {
+                                val started = okHoldJob != null
+                                okHoldJob?.cancel()
+                                okHoldJob = null
+                                if (started && !favoriteHandled) {
+                                    if (selectedUrl == ch.url) onPlay(ch) else selectedUrl = ch.url
+                                }
+                                favoriteHandled = false
+                                started
+                            } else false
+                        }
                         .onFocusChanged { focused = it.isFocused }
                         .background(if (active || focused) appTheme.selected else appTheme.row)
                         .border(if (focused) 2.dp else 0.dp, if (focused) v3Gold else Color.Transparent)
@@ -129,12 +174,11 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
                     fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(5.dp))
                 EpgPreview(selected)
+                favoriteNotice?.let { Text(it, color = v3Gold, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 Spacer(Modifier.weight(1f))
                 if (selected != null) Row(Modifier.fillMaxWidth().padding(4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (!isVodEntry(selected, false) && !isVodEntry(selected, true))
                         TvAction("EPG") { epgOpen = true }
-                    TvAction(tr(R.string.full_screen), Modifier.weight(1f)) { onPlay(selected) }
-                    TvAction((if (selected.url in favorites) "♥ " else "♡ ") + tr(R.string.favorite), Modifier.weight(1f)) { onToggleFavorite(selected) }
                 }
               }
             }
