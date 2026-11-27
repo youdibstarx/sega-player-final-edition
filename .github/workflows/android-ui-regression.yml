@@ -1,7 +1,7 @@
 name: Isolated Android UI regressions
 on:
   push:
-    branches: [fix/0.5.28-audit-poster-stability]
+    branches: [fix/0.5.28-audit-poster-stability, fix/panel-failover-0.5.30]
     paths: ['android/**', '.github/workflows/android-ui-regression.yml']
   workflow_dispatch:
 permissions:

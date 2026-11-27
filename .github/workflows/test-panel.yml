@@ -26,6 +26,7 @@ jobs:
           python -m pip_audit -r panel/requirements.txt --format json --output "$RUNNER_TEMP/sega-python-audit.json"
       - uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true
         with:
           name: SEGA-python-dependency-audit
           path: ${{ runner.temp }}/sega-python-audit.json
@@ -58,6 +59,7 @@ jobs:
           mkdir -p dist
           tar -czf dist/SEGA_PANEL_AUDIT_CANDIDATE.tar.gz -C panel main.py admin_auth.py endpoint_management.py reseller.py proof.py security.py requirements.txt requirements-dev.txt Dockerfile static README_SECURITY.md PORTAL_UPGRADE_AR.md
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: SEGA-panel-audit-candidate
           path: dist/SEGA_PANEL_AUDIT_CANDIDATE.tar.gz
