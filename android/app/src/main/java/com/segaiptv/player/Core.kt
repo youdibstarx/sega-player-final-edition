@@ -33,6 +33,7 @@ data class AppConfig(
     val accent: String = "#E5474C",
     val background: String = "",
     val logo: String = "",
+    val themeId: String = "device",
     val expires: String = "",
     val playlists: List<Playlist> = emptyList()
 )
@@ -130,6 +131,7 @@ object Api {
             accent = response.optString("accent_color", "#E5474C"),
             background = response.optString("background_url", ""),
             logo = response.optString("logo_url", ""),
+            themeId = response.optString("theme_id", "device"),
             expires = response.optString("expires_at", "").takeUnless { it == "null" } ?: "",
             playlists = lists
         )

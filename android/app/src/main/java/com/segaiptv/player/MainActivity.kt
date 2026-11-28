@@ -188,6 +188,7 @@ internal fun SegaIptvApp(loadConfig: suspend (DeviceIdentity) -> AppConfig = { A
             val freshConfig = loadConfig(identity)
             verifiedAt = android.os.SystemClock.elapsedRealtime()
             config = freshConfig
+            RemoteThemePolicy.id = freshConfig.themeId
             hasLoadedOnce = true
             loading = false
             if (!freshConfig.active) { playing = null; categoryMemory.clear() }

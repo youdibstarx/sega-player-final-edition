@@ -149,7 +149,8 @@ def initialize():
             app_name TEXT NOT NULL,
             accent_color TEXT NOT NULL,
             background_url TEXT NOT NULL,
-            logo_url TEXT NOT NULL
+            logo_url TEXT NOT NULL,
+            theme_id TEXT NOT NULL DEFAULT 'device'
         );
         CREATE TABLE IF NOT EXISTS subscriptions (
             device_id TEXT PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
@@ -165,9 +166,13 @@ def initialize():
         );
         CREATE INDEX IF NOT EXISTS devices_mac_lookup ON devices(mac_alias);
         INSERT OR IGNORE INTO subscriptions(device_id) SELECT id FROM devices;
-        INSERT OR IGNORE INTO settings VALUES
-            (1, 'SEGA IPTV Player', '#E5474C', '', '');
+        INSERT OR IGNORE INTO settings(id,app_name,accent_color,background_url,logo_url,theme_id)
+            VALUES (1, 'SEGA IPTV Player', '#E5474C', '', '', 'device');
         """)
+
+        settings_columns = {r["name"] for r in db.execute("PRAGMA table_info(settings)")}
+        if "theme_id" not in settings_columns:
+            db.execute("ALTER TABLE settings ADD COLUMN theme_id TEXT NOT NULL DEFAULT 'device'")
 
         # Upgrade legacy single-playlist storage in place without losing entries.
         columns = {r["name"] for r in db.execute("PRAGMA table_info(personal_playlists)")}
@@ -299,6 +304,7 @@ class ThemeInput(BaseModel):
     accent_color: str = Field(pattern=r"^#[a-fA-F0-9]{6}$")
     background_url: str = Field(default="", max_length=3000)
     logo_url: str = Field(default="", max_length=3000)
+    theme_id: str = Field(default="device", pattern=r"^(device|classic|ocean|emerald|sunset)$")
 
     @field_validator("background_url", "logo_url")
     @classmethod
@@ -409,6 +415,7 @@ async def device_config(device_id: str, request: Request):
         "active": enabled, "expires_at": device["expires_at"],
         "app_name": settings["app_name"], "accent_color": settings["accent_color"],
         "background_url": settings["background_url"], "logo_url": settings["logo_url"],
+        "theme_id": settings["theme_id"],
         "playlists": [dict(r) for r in playlist_rows] + (personal_for_config(device_id) if enabled else [])
     }
 
@@ -495,9 +502,9 @@ def set_assignments(device_id: str, payload: AssignmentInput, _: bool = Depends(
 @APP.put("/admin/api/settings")
 def set_theme(payload: ThemeInput, _: bool = Depends(admin_only)):
     with database() as db:
-        db.execute("""UPDATE settings SET app_name=?,accent_color=?,background_url=?,logo_url=?
+        db.execute("""UPDATE settings SET app_name=?,accent_color=?,background_url=?,logo_url=?,theme_id=?
                       WHERE id=1""", (payload.app_name.strip(), payload.accent_color,
-                                     payload.background_url.strip(), payload.logo_url.strip()))
+                                     payload.background_url.strip(), payload.logo_url.strip(), payload.theme_id))
     return {"saved": True}
 
 

@@ -103,6 +103,8 @@
     <string name="theme_classic">Carbon Red</string>
     <string name="theme_ocean">Ocean Blue</string>
     <string name="theme_emerald">Emerald Green</string>
+    <string name="theme_sunset">Sunset Orange</string>
+    <string name="theme_managed">The theme is set by the administrator.</string>
     <string name="theme_hint">Choose a theme. Changes apply immediately and are saved on this device.</string>
     <string name="preferences_group">Appearance and language</string>
     <string name="channel_order">Channel order</string>

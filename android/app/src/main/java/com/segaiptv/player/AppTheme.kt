@@ -23,15 +23,23 @@ internal enum class AppTheme(val id: String, val label: Int, val accent: Color,
         Color(0xFF19364D), Color(0xFF225A7D), Color(0xFF102B45), R.drawable.theme_ocean),
     EMERALD("emerald", R.string.theme_emerald, Color(0xFF84E0B8),
         Color(0xFF071610), Color(0xFF17382C), Color(0xFF112B22), Color(0xFF285441),
-        Color(0xFF1B3E30), Color(0xFF28684D), Color(0xFF133526), R.drawable.theme_emerald);
+        Color(0xFF1B3E30), Color(0xFF28684D), Color(0xFF133526), R.drawable.theme_emerald),
+    SUNSET("sunset", R.string.theme_sunset, Color(0xFFFFA36C),
+        Color(0xFF1B1014), Color(0xFF382027), Color(0xFF2B191F), Color(0xFF683244),
+        Color(0xFF43232D), Color(0xFF9A493E), Color(0xFF44202B), R.drawable.theme_carbon);
 
     companion object {
         fun fromId(id: String?): AppTheme = entries.firstOrNull { it.id == id } ?: CLASSIC
     }
 }
 
-internal data class ThemeSelection(val theme: AppTheme, val select: (AppTheme) -> Unit)
-internal val LocalThemeSelection = staticCompositionLocalOf { ThemeSelection(AppTheme.CLASSIC) {} }
+internal data class ThemeSelection(val theme: AppTheme, val locked: Boolean, val select: (AppTheme) -> Unit)
+
+/** Updated after each successful server sync; "device" keeps the user's local choice. */
+internal object RemoteThemePolicy {
+    var id by mutableStateOf("device")
+}
+internal val LocalThemeSelection = staticCompositionLocalOf { ThemeSelection(AppTheme.CLASSIC, false) {} }
 internal val appTheme: AppTheme
     @Composable get() = LocalThemeSelection.current.theme
 
@@ -39,10 +47,14 @@ internal val appTheme: AppTheme
 internal fun ThemeHost(content: @Composable () -> Unit) {
     val context = LocalContext.current.applicationContext
     val prefs = remember(context) { context.getSharedPreferences("segaiptv_ui", Context.MODE_PRIVATE) }
-    var theme by remember(prefs) { mutableStateOf(AppTheme.fromId(prefs.getString("theme", null))) }
-    CompositionLocalProvider(LocalThemeSelection provides ThemeSelection(theme) { chosen ->
-        prefs.edit().putString("theme", chosen.id).apply()
-        theme = chosen
+    var localTheme by remember(prefs) { mutableStateOf(AppTheme.fromId(prefs.getString("theme", null))) }
+    val locked = RemoteThemePolicy.id != "device"
+    val selectedTheme = if (locked) AppTheme.fromId(RemoteThemePolicy.id) else localTheme
+    CompositionLocalProvider(LocalThemeSelection provides ThemeSelection(selectedTheme, locked) { chosen ->
+        if (!locked) {
+            prefs.edit().putString("theme", chosen.id).apply()
+            localTheme = chosen
+        }
     }) { content() }
 }
 
@@ -56,7 +68,7 @@ internal fun ThemePicker(modifier: Modifier = Modifier) {
         title = { Text(tr(R.string.appearance_theme)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(tr(R.string.theme_hint), fontSize = 12.sp)
+                Text(if (selection.locked) tr(R.string.theme_managed) else tr(R.string.theme_hint), fontSize = 12.sp)
                 AppTheme.entries.forEach { option ->
                     Row(Modifier.fillMaxWidth().background(option.background).padding(4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -65,7 +77,7 @@ internal fun ThemePicker(modifier: Modifier = Modifier) {
                             Box(Modifier.size(16.dp).background(option.surface))
                         }
                         TvAction(tr(option.label), Modifier.weight(1f), selection.theme == option) {
-                            selection.select(option)
+                            if (!selection.locked) selection.select(option)
                         }
                     }
                 }

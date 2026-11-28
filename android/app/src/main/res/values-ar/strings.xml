@@ -103,6 +103,8 @@
     <string name="theme_classic">الأسود والأحمر</string>
     <string name="theme_ocean">الأزرق البحري</string>
     <string name="theme_emerald">الأخضر الزمردي</string>
+    <string name="theme_sunset">برتقالي الغروب</string>
+    <string name="theme_managed">تم تحديد المظهر من طرف المدير.</string>
     <string name="theme_hint">اختر مظهر التطبيق. يطبق فوراً ويحفظ على هذا الجهاز.</string>
     <string name="preferences_group">المظهر واللغة</string>
     <string name="channel_order">ترتيب القنوات</string>

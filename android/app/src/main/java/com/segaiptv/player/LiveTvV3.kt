@@ -120,7 +120,6 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
                     var okHoldJob by remember(ch.url) { mutableStateOf<Job?>(null) }
                     var favoriteHandled by remember(ch.url) { mutableStateOf(false) }
                     val active = ch.url == selectedUrl
-                    val favoriteLabel = tr(R.string.favorite)
                     Row(Modifier.fillMaxWidth().height(34.dp)
                         .then(if (active) Modifier.focusRequester(selectedFocus) else Modifier)
                         .onPreviewKeyEvent { event ->
@@ -132,6 +131,7 @@ fun LiveTvV3(modifier: Modifier = Modifier, channels: List<Channel>, loading: Bo
                             if (native.action == android.view.KeyEvent.ACTION_DOWN) {
                                 if (native.repeatCount == 0 && okHoldJob == null) {
                                     favoriteHandled = false
+                                    val favoriteLabel = tr(R.string.favorite)
                                     okHoldJob = holdScope.launch {
                                         delay(3000)
                                         favoriteHandled = true

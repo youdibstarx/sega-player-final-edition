@@ -103,6 +103,8 @@
     <string name="theme_classic">Carbone rouge</string>
     <string name="theme_ocean">Bleu océan</string>
     <string name="theme_emerald">Vert émeraude</string>
+    <string name="theme_sunset">Orange coucher de soleil</string>
+    <string name="theme_managed">Le thème est défini par l’administrateur.</string>
     <string name="theme_hint">Le thème est appliqué immédiatement et mémorisé sur cet appareil.</string>
     <string name="preferences_group">Apparence et langue</string>
     <string name="channel_order">Ordre des chaînes</string>
