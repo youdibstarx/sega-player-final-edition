@@ -166,13 +166,13 @@ def initialize():
         );
         CREATE INDEX IF NOT EXISTS devices_mac_lookup ON devices(mac_alias);
         INSERT OR IGNORE INTO subscriptions(device_id) SELECT id FROM devices;
-        INSERT OR IGNORE INTO settings(id,app_name,accent_color,background_url,logo_url,theme_id)
-            VALUES (1, 'SEGA IPTV Player', '#E5474C', '', '', 'device');
         """)
 
         settings_columns = {r["name"] for r in db.execute("PRAGMA table_info(settings)")}
         if "theme_id" not in settings_columns:
             db.execute("ALTER TABLE settings ADD COLUMN theme_id TEXT NOT NULL DEFAULT 'device'")
+        db.execute("""INSERT OR IGNORE INTO settings(id,app_name,accent_color,background_url,logo_url,theme_id)
+                      VALUES (1, 'SEGA IPTV Player', '#E5474C', '', '', 'device')""")
 
         # Upgrade legacy single-playlist storage in place without losing entries.
         columns = {r["name"] for r in db.execute("PRAGMA table_info(personal_playlists)")}
